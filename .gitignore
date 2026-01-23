@@ -1,0 +1,112 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.env
+.venv
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+*.geojson
+
+*.json
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# Data files (кроме примеров)
+*.csv
+*.xlsx
+*.parquet
+*.pickle
+*.pkl
+data/
+
+# Model files
+*.model
+*.joblib
+*.h5
+*.ckpt
+models/*.pkl
+models/*.joblib
+!models/.gitkeep
+
+# Logs
+*.log
+logs/
+!logs/.gitkeep
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+.idea
+
+
+.vscode
+minio_data/*
+!minio_data/.gitkeep
+pgdata/*
+!pgdata/.gitkeep
+pgdata
+minio_data
