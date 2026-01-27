@@ -1,105 +1,69 @@
-# 🚀 MLflow Tracking Server — Dockerized Setup
+# MLOps Reference Stack (MLflow + Airflow + Prometheus)
 
-Контейнерная сборка MLflow (версия 3.5.0) с PostgreSQL как metadata store и MinIO как S3‑совместимым хранилищем артефактов. Сборка ориентирована на внутреннее развёртывание для разработки, тестирования и небольших окружений.
+This repository provides a minimal, script-first MLOps stack for data scientists (Phase 1):
+- you run experiments locally or in notebooks,
+- every training run is logged to MLflow (params/metrics/artifacts),
+- artifacts are stored in MinIO,
+- a single model service auto-follows MLflow alias from env,
+- Prometheus/Grafana monitor all services.
 
----
+Key components
+- MLflow + PostgreSQL for tracking and model registry
+- MinIO for artifact storage (S3-compatible)
+- Airflow for batch and scheduled tasks only
+- Model server (reads MLflow alias from env)
+- Tag watcher (reads MLflow aliases and reports status)
+- Prometheus + Grafana
 
-## 🔎 Структура репозитория
+Docs
+- Demo guide (EN): [docs/DEMO.md](docs/DEMO.md)
+- Architecture and end-to-end flow (EN): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Scripts & DAGs (EN): [docs/SCRIPTS.md](docs/SCRIPTS.md)
 
-/data/aturov/mlflow/
-- docker-compose.yml        — оркестрация (MLflow, Postgres, MinIO)
-- Dockerfile                — (опционально) кастомный образ MLflow
-- requirements.txt          — зависимости для локальной разработки
-- .env.example              — пример конфигурации (без секретов)
-- pgdata/                   — том Postgres (локально)
-- minio_data/               — том MinIO (локально)
-- README.md                 — документация (этот файл)
-- test/test_mlflow.py       — пример smoke‑теста
-
-> Примечание: реальный файл `.env` с паролями и ключами не должен храниться в репозитории.
-
----
-
-## ⚙️ Быстрый старт
-1️⃣ Перед запуском клиента экспортируйте S3‑переменные (локально, не в репо):
-
+Quick start
 ```bash
-cd /data/aturov/mlflow 
-# создать venv (если его нет)
-python3 -m venv venv
-# активировать
-source venv/bin/activate
-# установить зависимости (если есть requirements.txt)
-pip install --upgrade pip
-pip install -r requirements.txt
+cp env.dev.example .env
+docker compose --env-file .env up -d --build
 ```
-2️⃣ Start all services  
-docker compose --env-file .env up -d --build  
-  
-3️⃣ Verify running containers  
-docker ps  
-You should see:  
-  
-mlflow_postgres  
-mlflow_minio  
-mlflow_server  
 
-🌐 Accessing the Services    
-Service	URL	Notes    
-MLflow UI	http://10.16.230.222:5000    
-	Main MLflow interface    
-MinIO Console	http://10.16.230.222:9023      
-MinIO S3 API	http://10.16.230.222:9022    
-  Need creating a bucket named `mlflow` for MLflow artifacts storage    
-PostgreSQL	10.16.230.222:6432	Accessible with pgAdmin or psql      
-(Adjust ports as needed based on your `.env` configuration.)    
----
+Demo flow (for the article)
+1) Bring up services via Docker Compose.
+2) Run Airflow DAG `dag_data_predictions` (loads an open dataset into app-db).
+3) Run Airflow DAG `dag_training` (trains multiple models, logs metrics in MLflow).
+4) In MLflow UI, set alias `Production` for the best model.
+5) `model-server` auto-loads the `Production` alias.
+6) Prometheus/Grafana start tracking metrics from the beginning.
+7) Run Airflow DAG `dag_inference` to send predictions using the `Production` alias.
+8) Observe request/latency metrics in Grafana.
 
-## 🧪 Smoke test (пример)
-  
-Файл: test/test_mlflow.py — пример логирования параметров, метрик и артефакта:
+Main endpoints (ports are defined in .env)
+- MLflow UI: http://localhost:${MLFLOW_PORT}
+- Airflow UI: http://localhost:${AIRFLOW_WEB_PORT}
+- MinIO Console: http://localhost:${MINIO_CONSOLE_PORT}
+- Model service: http://localhost:${MODEL_SERVER_PORT} (alias via `MODEL_ALIAS`)
+- Tag watcher: http://localhost:${TAG_WATCHER_PORT}/status
+- Grafana: http://localhost:${GRAFANA_PORT}
+- Prometheus: http://localhost:${PROMETHEUS_PORT}
 
-```python
-import mlflow, tempfile, json, time, os
+Workflow (data scientist view)
+1) Build features in notebooks, Airflow, or service.
+2) Train locally and log to MLflow (params/metrics/artifacts).
+3) Assign alias (for example, `Production`) to the candidate model.
+4) `model-server` auto-loads the alias defined in `MODEL_ALIAS`.
+5) When ready, promote by switching MLflow alias to a new version.
 
-mlflow.set_tracking_uri("http://<MLFLOW_HOST>:5000")
-mlflow.set_experiment("scoring-features")
+Why MLflow here?
+MLflow provides model registry, run metadata, metrics comparison, and artifact storage. Even if you upload datasets directly, MLflow gives reproducibility, auditability, and easy promotion/rollback via aliases.
 
-with mlflow.start_run(run_name="smoke-test"):
-    mlflow.log_param("p", 123)
-    mlflow.log_metric("m", 0.42)
-    with tempfile.TemporaryDirectory() as d:
-        fpath = os.path.join(d, "sample.json")
-        json.dump({"ok": True, "ts": time.time()}, open(fpath, "w"))
-        mlflow.log_artifact(fpath)
+Python toolkit
+Install and use the CLI from [README_library.md](README_library.md) to automate MLflow aliases (Phase 1).
 
-print("✅ Run complete")
+Predict request (demo):
+```bash
+python scripts/predict_request.py --url http://localhost:${MODEL_SERVER_PORT} --payload data/predict_payload.json
 ```
----
 
-## 🧰 Полезные команды
+Notes
+- Airflow is kept for scheduled/batch workflows only (daily/weekly retraining or batch predictions).
+- Online inference is performed via the single model service.
 
-- Просмотр логов:    
-  docker compose --env-file .env logs -f    
-- Остановить и удалить (контейнеры + тома):    
-  docker compose down   
-- Проверить состояние контейнеров:  
-  docker ps -a  
-- Очистка Docker:   
-  docker system prune -af --volumes  
-
----
-
-
-
-## 🔮 MLOps Roadmap
-
-- [x] Deploy MLflow Tracking Server (Postgres + MinIO)
-- [ ] Integrate with Airflow for model training pipelines
-- [ ] Add model serving (FastAPI + MLflow Registry)
-- [ ] Add monitoring (Prometheus + Grafana)
-- [ ] Secure with HTTPS and authentication (Nginx)
-- [ ] Automate backups and versioning (Postgres + MinIO)
-
-## 🧑‍💻 Автор
-Alexey Turov — Data Scientist @ Beeline Kyrgyzstan

@@ -1,0 +1,56 @@
+stages:
+  - build
+  - deploy
+variables:
+  COMPOSE_FILE_DEV: "docker-compose.yml"
+  DOCKER_COMPOSE_TIMEOUT: "600"
+  
+build_dev:
+  stage: build
+  tags:
+    - dev
+    - data_science
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+      changes:
+        - docker-compose.yml
+        - Dockerfile
+        - Dockerfile.airflow
+        - src/**/*
+        - airflow/dags/**/*
+        - monitoring/**/*
+        - nginx/**/*
+        - .gitlab-ci.yml
+        - requirements.txt
+        - requirements-airflow.txt
+  script:
+    - set -eux
+    - docker compose --env-file .env -f "$COMPOSE_FILE_DEV" build --pull
+  timeout: 1h
+  retry: 1
+deploy_dev:
+  stage: deploy
+  tags:
+    - dev
+    - data_science
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'
+      changes:
+        - docker-compose.yml
+        - Dockerfile
+        - Dockerfile.airflow
+        - src/**/*
+        - airflow/dags/**/*
+        - monitoring/**/*
+        - nginx/**/*
+        - .gitlab-ci.yml
+        - requirements.txt
+        - requirements-airflow.txt
+  script:
+    - set -eux
+    - docker compose --env-file .env -p kpi-maps-dev -f "$COMPOSE_FILE_DEV" down --remove-orphans || true
+    - docker compose --env-file .env -p kpi-maps-dev -f "$COMPOSE_FILE_DEV" up -d --remove-orphans
+    - docker compose --env-file .env -p kpi-maps-dev -f "$COMPOSE_FILE_DEV" ps || true
+    - rm -rf logs/ || true
+  timeout: 30m
+  retry: 1

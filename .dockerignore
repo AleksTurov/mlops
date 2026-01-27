@@ -1,0 +1,12 @@
+.git/
+.venv/
+__pycache__/
+pgdata/
+airflow/
+artifacts/
+data/
+notebook/
+monitoring/
+nginx/
+.env
+*.log

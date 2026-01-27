@@ -1,0 +1,9 @@
+FROM apache/airflow:2.9.3
+
+# Copy requirements and install them as the 'airflow' user following best practices
+USER root
+COPY requirements-airflow.txt /requirements-airflow.txt
+RUN chown airflow: /requirements-airflow.txt
+USER airflow
+RUN pip install --no-cache-dir -r /requirements-airflow.txt
+

@@ -1,18 +1,18 @@
 FROM python:3.10-slim
 
-# Устанавливаем системные зависимости для psycopg2 и работы с s3
+# Install system dependencies for psycopg2 and S3 support
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Создаем рабочую директорию
+# Set working directory
 WORKDIR /app
 
-# Копируем зависимости и устанавливаем
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# По умолчанию запускаем MLflow
+# Run MLflow tracking server
 CMD mlflow server \
     --backend-store-uri ${POSTGRES_URI} \
     --default-artifact-root ${ARTIFACT_ROOT} \

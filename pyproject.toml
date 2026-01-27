@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mlops-toolkit"
+version = "0.1.0"
+description = "Lightweight helpers for MLflow and optional drift checks"
+readme = "README_library.md"
+requires-python = ">=3.9"
+dependencies = [
+  "mlflow>=3.5.0",
+  "requests>=2.32.0",
+]
+
+[project.scripts]
+mlops-toolkit = "mlops_toolkit.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

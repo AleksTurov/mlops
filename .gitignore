@@ -25,6 +25,7 @@ wheels/
 *.egg
 MANIFEST
 .env
+!.env
 .venv
 # PyInstaller
 *.manifest
@@ -54,6 +55,7 @@ coverage.xml
 
 # Environments
 .env
+!.env
 .venv
 env/
 venv/
@@ -63,6 +65,7 @@ venv.bak/
 *.geojson
 
 *.json
+!monitoring/grafana/dashboards/*.json
 
 # Temporary files
 *.tmp
