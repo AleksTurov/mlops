@@ -1,0 +1,37 @@
+{
+  "title": "Service Health",
+  "uid": "service-health",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "table",
+      "title": "Service Health (HTTP)",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 10},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "probe_success",
+          "refId": "A"
+        }
+      ],
+      "options": {"showHeader": true}
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP Status Codes",
+      "gridPos": {"x": 0, "y": 10, "w": 24, "h": 10},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "probe_http_status_code",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "annotations": {"list": []},
+  "templating": {"list": []}
+}

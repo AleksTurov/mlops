@@ -1,0 +1,156 @@
+{
+  "title": "MLflow Serving",
+  "uid": "mlflow-serving",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "text",
+      "title": "Overview",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 2},
+      "options": {
+        "mode": "markdown",
+        "content": "Use **Model** and **Alias** filters to focus on Production vs Test.\nThis dashboard shows health and probe latency for each model@alias."
+      }
+    },
+    {
+      "type": "stat",
+      "title": "MLflow Serve UP (by model@alias)",
+      "gridPos": {"x": 0, "y": 2, "w": 24, "h": 4},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "max by (model, alias) (probe_success{job=\"blackbox-mlflow-serve\", model=~\"$model\", alias=~\"$alias\"})",
+          "legendFormat": "{{model}}@{{alias}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        },
+        "overrides": []
+      },
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}, "orientation": "horizontal", "textMode": "value", "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "type": "table",
+      "title": "UP instances by alias",
+      "gridPos": {"x": 0, "y": 6, "w": 8, "h": 4},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum by (alias) (probe_success{job=\"blackbox-mlflow-serve\", model=~\"$model\"})",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {"id": "labelsToFields", "options": {}},
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true
+            },
+            "indexByName": {
+              "alias": 0,
+              "Value": 1
+            },
+            "renameByName": {
+              "Value": "up_instances"
+            }
+          }
+        }
+      ],
+      "options": {"showHeader": true}
+    },
+    {
+      "type": "timeseries",
+      "title": "MLflow Serve latency (probe_duration_seconds)",
+      "gridPos": {"x": 8, "y": 6, "w": 16, "h": 8},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "probe_duration_seconds{job=\"blackbox-mlflow-serve\", model=~\"$model\", alias=~\"$alias\"}",
+          "legendFormat": "{{model}}@{{alias}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "MLflow Serve /ping (details)",
+      "gridPos": {"x": 0, "y": 14, "w": 24, "h": 8},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "probe_success{job=\"blackbox-mlflow-serve\", model=~\"$model\", alias=~\"$alias\"}",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {"id": "labelsToFields", "options": {}},
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "Time": 0,
+              "model": 1,
+              "alias": 2,
+              "instance": 3,
+              "Value": 4
+            },
+            "renameByName": {
+              "Value": "probe_success"
+            }
+          }
+        }
+      ],
+      "options": {"showHeader": true}
+    },
+    {
+      "type": "text",
+      "title": "How to call MLflow Serve",
+      "gridPos": {"x": 0, "y": 22, "w": 24, "h": 5},
+      "options": {
+        "mode": "markdown",
+        "content": "**Endpoints**\n- Health: `GET /ping`\n- Inference: `POST /invocations`\n\n**Find container**\n- `docker ps --format '{{.Names}}' | grep mlflow-serve-`\n\n**Input schema**\n- MLflow UI → Artifacts → `data_contract/input_schema.json`\n\n**Test alias**\n- Use the dashboard filter **Alias** and select `Test`.\n\n**Note**\nMLflow Serve не публикует метрики количества запросов. Для RPS/ошибок нужен внешний gateway/инструментированный сервис."
+      }
+    }
+  ],
+  "annotations": {"list": []},
+  "templating": {
+    "list": [
+      {
+        "type": "query",
+        "name": "model",
+        "label": "Model",
+        "datasource": "Prometheus",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "sort": 1,
+        "query": "label_values(probe_success{job=\"blackbox-mlflow-serve\"}, model)",
+        "current": {"text": "All", "value": "$__all"}
+      },
+      {
+        "type": "query",
+        "name": "alias",
+        "label": "Alias",
+        "datasource": "Prometheus",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "sort": 1,
+        "query": "label_values(probe_success{job=\"blackbox-mlflow-serve\"}, alias)",
+        "current": {"text": "All", "value": "$__all"}
+      }
+    ]
+  }
+}
