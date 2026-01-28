@@ -4,7 +4,7 @@ This repository provides a minimal, script-first MLOps stack for data scientists
 - you run experiments locally or in notebooks,
 - every training run is logged to MLflow (params/metrics/artifacts),
 - artifacts are stored in MinIO,
-- MLflow models are served via standard `mlflow models serve` containers,
+- MLflow models are served via standard `mlflow models serve` containers (auto-managed),
 - Prometheus/Grafana monitor all services.
 
 Key components
@@ -18,7 +18,7 @@ Key components
 Docs
 - Demo guide (EN): [docs/DEMO.md](docs/DEMO.md)
 - Architecture and end-to-end flow (EN): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- Архитектура (RU): [docs/ARCHITECTURE_RU.md](docs/ARCHITECTURE_RU.md)
+- Architecture (RU): [docs/ARCHITECTURE_RU.md](docs/ARCHITECTURE_RU.md)
 - Scripts & DAGs (EN): [docs/SCRIPTS.md](docs/SCRIPTS.md)
 
 Quick start
@@ -27,11 +27,11 @@ cp env.dev.example .env
 docker compose --env-file .env up -d --build
 ```
 
-Автодемо запускается контейнером `demo-bootstrap` и делает:
-- проверку health сервисов,
-- unpause/trigger DAGs `dag_data_predictions` и `dag_training`.
+Auto-demo runs via the `demo-bootstrap` container and does:
+- health checks for core services,
+- unpause/trigger DAGs `dag_data_predictions` and `dag_training`.
 
-Если нужно сбросить эксперименты MLflow при старте, добавьте в .env:
+If you need to reset MLflow experiments on start, add to .env:
 ```
 BOOTSTRAP_RESET_MLFLOW=true
 ```
@@ -39,9 +39,9 @@ BOOTSTRAP_RESET_MLFLOW=true
 Demo flow (auto on first start)
 1) `demo-bootstrap` triggers `dag_data_predictions` (loads dataset into app-db).
 2) `demo-bootstrap` triggers `dag_training` (trains models, logs metrics in MLflow).
-3) Training автоматически назначает alias `Production` для лучшей версии.
-4) `mlflow-autoserve` поднимает `mlflow models serve` для всех моделей с alias.
-5) Prometheus/Grafana начинают сбор метрик сразу после старта.
+3) Training automatically assigns alias `Production` to the best version.
+4) `mlflow-autoserve` starts `mlflow models serve` for all aliases.
+5) Prometheus/Grafana start collecting health signals immediately.
 
 Main endpoints (ports are defined in .env)
 - MLflow UI: http://localhost:${MLFLOW_PORT}
@@ -54,6 +54,7 @@ Main endpoints (ports are defined in .env)
 Dashboards
 - Grafana dashboards are provisioned from [monitoring/grafana/dashboards-min](monitoring/grafana/dashboards-min)
 - Use dashboard "Service Health Detailed" to verify each service is alive.
+- Use dashboard "MLflow Serving" to inspect model serving status and /ping health.
 
 Workflow (data scientist view)
 1) Build features in notebooks, Airflow, or service.
@@ -70,12 +71,17 @@ Install and use the CLI from [README_library.md](README_library.md) to automate 
 
 How to call MLflow served models (inside Docker network):
 ```bash
-docker compose --env-file .env exec -T mlflow-autoserve curl http://<mlflow-serve-container>:5000/ping
-```
-To list containers:
-```bash
 docker ps --format '{{.Names}}' | grep mlflow-serve-
+docker run --rm --network mlops_default curlimages/curl:8.5.0 -sS http://<mlflow-serve-container>:5000/ping
 ```
+Inference example:
+```bash
+docker run --rm --network mlops_default curlimages/curl:8.5.0 -sS \
+	-H 'Content-Type: application/json' \
+	-d '{"dataframe_records":[{"feature_a":1,"feature_b":2}]}' \
+	http://<mlflow-serve-container>:5000/invocations
+```
+Get the expected feature order from MLflow artifacts: `data_contract/input_schema.json`.
 
 Notes
 - Airflow is kept for scheduled/batch workflows only (daily/weekly retraining or batch predictions).

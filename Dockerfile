@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 # Install system dependencies for psycopg2 and S3 support
 RUN apt-get update && apt-get install -y --no-install-recommends \
