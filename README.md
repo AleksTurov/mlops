@@ -1,8 +1,30 @@
 # MLOps Reference Stack (MLflow + Airflow + Prometheus + Loki)
 
 Architecture (visual)
-![Architecture overview](docs/MLops1.png)
-![Service health view](docs/MLops2.png)
+```mermaid
+flowchart TB
+	subgraph Data_Training[Data / Training Flow]
+		Jupyter[Jupyter] --> MLflow[MLflow Tracking]
+		Airflow[Airflow DAGs] --> MLflow
+		MLflow --> MinIO[MinIO (S3 Artifacts)]
+		MLflow --> MLflowDB[(PostgreSQL mlflow-db)]
+		Airflow --> AppDB[(PostgreSQL app-db)]
+	end
+
+	subgraph Serving_Obs[Serving / Observability Flow]
+		Registry[MLflow Registry
+		aliases: Production / Test] --> AutoServe[MLflow AutoServe]
+		AutoServe --> ServeProd[MLflow Serve (Production)]
+		AutoServe --> ServeTest[MLflow Serve (Test)]
+		ServeProd --> Blackbox[Blackbox Exporter]
+		ServeTest --> Blackbox
+		Blackbox --> Prometheus[Prometheus]
+		Prometheus --> Grafana[Grafana]
+		ServeProd --> Loki[Loki]
+		ServeTest --> Loki
+		Loki --> Grafana
+	end
+```
 
 This repository provides a minimal, script-first MLOps stack for data scientists (Phase 1):
 - you run experiments locally or in notebooks,
