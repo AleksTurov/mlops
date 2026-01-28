@@ -44,7 +44,6 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
-.pytest_cache/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -79,7 +78,6 @@ venv.bak/
 data/
 
 # Model files
-*.model
 *.joblib
 *.h5
 *.ckpt
