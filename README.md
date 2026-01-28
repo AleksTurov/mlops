@@ -27,6 +27,13 @@ Docs
 - Architecture (RU): [docs/ARCHITECTURE_RU.md](docs/ARCHITECTURE_RU.md)
 - Scripts & DAGs (EN): [docs/SCRIPTS.md](docs/SCRIPTS.md)
 
+Local Python environment (optional)
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
 Quick start
 ```bash
 cp env.dev.example .env
@@ -78,14 +85,14 @@ Install and use the CLI from [README_library.md](README_library.md) to automate 
 How to call MLflow served models (inside Docker network):
 ```bash
 docker ps --format '{{.Names}}' | grep mlflow-serve-
-docker run --rm --network mlops_default curlimages/curl:8.5.0 -sS http://<mlflow-serve-container>:5000/ping
+docker run --rm --network mlops_default curlimages/curl:8.5.0 -sS http://<mlflow-serve-container>:8080/ping
 ```
 Inference example:
 ```bash
 docker run --rm --network mlops_default curlimages/curl:8.5.0 -sS \
 	-H 'Content-Type: application/json' \
 	-d '{"dataframe_records":[{"feature_a":1,"feature_b":2}]}' \
-	http://<mlflow-serve-container>:5000/invocations
+	http://<mlflow-serve-container>:8080/invocations
 ```
 Get the expected feature order from MLflow artifacts: `data_contract/input_schema.json`.
 

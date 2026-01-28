@@ -305,8 +305,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     command: python -m app.mlflow_autoserve
 
-
-
 volumes:
   mlops_airflow_db_data:
   mlops_app_db_data:
