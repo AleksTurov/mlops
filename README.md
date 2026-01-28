@@ -1,5 +1,9 @@
 # MLOps Reference Stack (MLflow + Airflow + Prometheus + Loki)
 
+Architecture (visual)
+![Architecture overview](docs/MLops1.png)
+![Service health view](docs/MLops2.png)
+
 This repository provides a minimal, script-first MLOps stack for data scientists (Phase 1):
 - you run experiments locally or in notebooks,
 - every training run is logged to MLflow (params/metrics/artifacts),
