@@ -25,7 +25,6 @@ wheels/
 *.egg
 MANIFEST
 .env
-!.env
 .venv
 # PyInstaller
 *.manifest
@@ -55,7 +54,6 @@ coverage.xml
 
 # Environments
 .env
-!.env
 .venv
 env/
 venv/
