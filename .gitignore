@@ -63,6 +63,8 @@ venv.bak/
 
 *.json
 !monitoring/*/*/*
+!monitoring/grafana/dashboards-min/*.json
+!monitoring/grafana/dashboards/*.json
 
 # Temporary files
 *.tmp
