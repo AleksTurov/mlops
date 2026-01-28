@@ -7,6 +7,5 @@ artifacts/
 data/
 notebook/
 monitoring/
-nginx/
 .env
 *.log

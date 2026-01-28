@@ -48,7 +48,9 @@ def _build_prediction_rows(
     rows = []
     rows_data = features.to_dict(orient="records")
     if task_type == "classification":
-        for row, pred, proba in zip(rows_data, predictions, probabilities or []):
+        probabilities_iter = probabilities if probabilities is not None else [None] * len(rows_data)
+        for row, pred, proba in zip(rows_data, predictions, probabilities_iter):
+            proba_values = [float(x) for x in proba] if proba is not None else []
             rows.append(
                 {
                     "model_name": model_name,
@@ -57,11 +59,11 @@ def _build_prediction_rows(
                     "run_group_id": run_group_id,
                     "model_role": model_role,
                     "predicted_class": int(pred),
-                    "probabilities": {"values": [float(x) for x in proba]},
-                    "probability_0": float(proba[0]) if len(proba) > 0 else None,
-                    "probability_1": float(proba[1]) if len(proba) > 1 else None,
-                    "probability_2": float(proba[2]) if len(proba) > 2 else None,
-                    "probability_max": float(max(proba)) if len(proba) > 0 else None,
+                    "probabilities": {"values": proba_values},
+                    "probability_0": float(proba_values[0]) if len(proba_values) > 0 else None,
+                    "probability_1": float(proba_values[1]) if len(proba_values) > 1 else None,
+                    "probability_2": float(proba_values[2]) if len(proba_values) > 2 else None,
+                    "probability_max": float(max(proba_values)) if len(proba_values) > 0 else None,
                     "input_features": row,
                     "sepal_length": row.get("sepal_length"),
                     "sepal_width": row.get("sepal_width"),
@@ -99,9 +101,17 @@ def run_inference() -> int:
 
     dataset_df, dataset_name, task_type, target_column = _load_latest_features()
     model_name = f"{settings.mlflow_model_name}_{dataset_name}"
-    model_version = client.get_model_version_by_alias(
-        model_name, settings.mlflow_model_alias
-    ).version
+    try:
+        model_version = client.get_model_version_by_alias(
+            model_name, settings.mlflow_model_alias
+        ).version
+    except mlflow.exceptions.RestException as exc:
+        logger.warning(
+            "Inference skipped: alias %s not found (%s)",
+            settings.mlflow_model_alias,
+            exc,
+        )
+        return 0
 
     model_uri = f"models:/{model_name}@{settings.mlflow_model_alias}"
     model = mlflow.sklearn.load_model(model_uri)
@@ -139,8 +149,20 @@ def run_shadow_inference(test_alias: str = "test") -> int:
     dataset_df, dataset_name, task_type, target_column = _load_latest_features()
     model_name = f"{settings.mlflow_model_name}_{dataset_name}"
 
-    prod_version = client.get_model_version_by_alias(model_name, settings.mlflow_model_alias).version
-    test_version = client.get_model_version_by_alias(model_name, test_alias).version
+    try:
+        prod_version = client.get_model_version_by_alias(model_name, settings.mlflow_model_alias).version
+    except mlflow.exceptions.RestException as exc:
+        logger.warning(
+            "Shadow inference skipped: alias %s not found (%s)",
+            settings.mlflow_model_alias,
+            exc,
+        )
+        return 0
+    try:
+        test_version = client.get_model_version_by_alias(model_name, test_alias).version
+    except mlflow.exceptions.RestException as exc:
+        logger.warning("Shadow inference skipped: alias %s not found (%s)", test_alias, exc)
+        return 0
 
     prod_uri = f"models:/{model_name}@{settings.mlflow_model_alias}"
     test_uri = f"models:/{model_name}@{test_alias}"

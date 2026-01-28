@@ -7,8 +7,9 @@
 4) Set alias `Production` for the best model.
 5) Model server tracks alias and serves the `Production` model.
 6) Prometheus/Grafana monitor from the start, including model reloads.
-7) Run inference via Airflow and send predictions to the production model.
-8) Grafana tracks requests/latency/errors.
+7) Loki collects logs from all containers (via Promtail).
+8) Run inference via Airflow and send predictions to the production model.
+9) Grafana tracks requests/latency/errors and shows logs.
 
 ## Step‑by‑step
 1) Start services
@@ -30,13 +31,15 @@ docker compose --env-file .env up -d --build
 - Ensure `.env` has `MODEL_ALIAS=Production` (default).
 
 5) Verify serving
-- `model-server` auto-loads `Production` alias.
-- `GET /model/info` returns model name/version/alias.
+- `mlflow-autoserve` starts a `mlflow models serve` container per alias.
+- Health check is available at `/ping` inside the Docker network.
 
 6) Inference
 - Run DAG: `dag_inference`.
 - It loads `Production` alias and stores predictions in app-db.
 
 7) Observability
-- Grafana dashboards show request latency, RPS, errors.
-- Tag watcher shows current alias/version.
+- Grafana **Service Health** shows new `mlflow-serve-*` targets via Blackbox.
+- Loki logs are available in Grafana (Loki datasource).
+
+Dashboards are provisioned from `monitoring/grafana/dashboards-min`.

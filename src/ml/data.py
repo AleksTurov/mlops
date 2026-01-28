@@ -16,8 +16,9 @@ def _store_dataframe(df: pd.DataFrame, name: str, task_type: str, target_column:
     with SessionLocal() as db:
         dataset = create_dataset(db, name=name, task_type=task_type, target_column=target_column)
         insert_dataset_rows(db, dataset.id, rows)
+        dataset_id = dataset.id
     logger.info("Dataset %s stored: %s rows", name, len(rows))
-    return dataset.id
+    return dataset_id
 
 
 def load_sklearn_dataset(name: str, task_type: Optional[str] = None) -> int:
