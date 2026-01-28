@@ -1,0 +1,290 @@
+{
+  "title": "Service Health Detailed",
+  "uid": "service-health-detailed",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "MLflow",
+      "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+      "datasource": "Prometheus",
+      "targets": [
+        {"expr": "probe_success{job=\"blackbox-http\", instance=\"http://mlflow:5000/health\"}", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        },
+        "overrides": []
+      },
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}, "orientation": "horizontal", "textMode": "value", "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "type": "stat",
+      "title": "Airflow",
+      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+      "datasource": "Prometheus",
+      "targets": [
+        {"expr": "probe_success{job=\"blackbox-http\", instance=\"http://airflow-webserver:8080/health\"}", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        },
+        "overrides": []
+      },
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}, "orientation": "horizontal", "textMode": "value", "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "type": "stat",
+      "title": "MinIO",
+      "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+      "datasource": "Prometheus",
+      "targets": [
+        {"expr": "probe_success{job=\"blackbox-http\", instance=\"http://minio:9000/minio/health/live\"}", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        },
+        "overrides": []
+      },
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}, "orientation": "horizontal", "textMode": "value", "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "type": "stat",
+      "title": "Prometheus",
+      "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+      "datasource": "Prometheus",
+      "targets": [
+        {"expr": "probe_success{job=\"blackbox-http\", instance=\"http://prometheus:9090/-/healthy\"}", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        },
+        "overrides": []
+      },
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}, "orientation": "horizontal", "textMode": "value", "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "type": "stat",
+      "title": "Loki",
+      "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
+      "datasource": "Prometheus",
+      "targets": [
+        {"expr": "probe_success{job=\"blackbox-http\", instance=\"http://loki:3100/ready\"}", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        },
+        "overrides": []
+      },
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}, "orientation": "horizontal", "textMode": "value", "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "type": "stat",
+      "title": "Grafana",
+      "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
+      "datasource": "Prometheus",
+      "targets": [
+        {"expr": "probe_success{job=\"blackbox-http\", instance=\"http://grafana:3000/api/health\"}", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        },
+        "overrides": []
+      },
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}, "orientation": "horizontal", "textMode": "value", "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "type": "text",
+      "title": "How to read this dashboard",
+      "gridPos": {"x": 0, "y": 4, "w": 24, "h": 2},
+      "options": {
+        "mode": "markdown",
+        "content": "**Core services** are shown above.\n\nUse the **Model** and **Alias** filters to focus on Production vs Test.\n**MLflow Serve** panels below show health by model@alias and per-instance /ping checks."
+      }
+    },
+    {
+      "type": "stat",
+      "title": "MLflow Serve UP (model@alias)",
+      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 4},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "max by (model, alias) (probe_success{job=\"blackbox-mlflow-serve\", model=~\"$model\", alias=~\"$alias\"})",
+          "legendFormat": "{{model}}@{{alias}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        },
+        "overrides": []
+      },
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}, "orientation": "horizontal", "textMode": "value", "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "type": "table",
+      "title": "MLflow Serve UP (by alias)",
+      "gridPos": {"x": 0, "y": 10, "w": 12, "h": 5},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum by (alias) (probe_success{job=\"blackbox-mlflow-serve\", model=~\"$model\"})",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {"id": "labelsToFields", "options": {}},
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true
+            },
+            "indexByName": {
+              "alias": 0,
+              "Value": 1
+            },
+            "renameByName": {
+              "Value": "up_instances"
+            }
+          }
+        }
+      ],
+      "options": {"showHeader": true}
+    },
+    {
+      "type": "table",
+      "title": "MLflow Serve /ping (instances)",
+      "gridPos": {"x": 12, "y": 10, "w": 12, "h": 5},
+      "datasource": "Prometheus",
+      "targets": [
+        {"expr": "probe_success{job=\"blackbox-mlflow-serve\", model=~\"$model\", alias=~\"$alias\"}", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {"id": "labelsToFields", "options": {}},
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true
+            },
+            "indexByName": {
+              "model": 0,
+              "alias": 1,
+              "instance": 2,
+              "Value": 3
+            },
+            "renameByName": {
+              "Value": "status"
+            }
+          }
+        }
+      ],
+      "options": {"showHeader": true}
+    },
+    {
+      "type": "table",
+      "title": "MLflow Serve /ping (details)",
+      "gridPos": {"x": 0, "y": 15, "w": 24, "h": 7},
+      "datasource": "Prometheus",
+      "targets": [
+        {"expr": "probe_success{job=\"blackbox-mlflow-serve\", model=~\"$model\", alias=~\"$alias\"}", "refId": "A"}
+      ],
+      "transformations": [
+        {"id": "labelsToFields", "options": {}},
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "job": true
+            },
+            "indexByName": {
+              "model": 0,
+              "alias": 1,
+              "instance": 2,
+              "Value": 3
+            },
+            "renameByName": {
+              "Value": "status"
+            }
+          }
+        }
+      ],
+      "options": {"showHeader": true}
+    }
+  ],
+  "annotations": {"list": []},
+  "templating": {
+    "list": [
+      {
+        "type": "query",
+        "name": "model",
+        "label": "Model",
+        "datasource": "Prometheus",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "sort": 1,
+        "query": "label_values(probe_success{job=\"blackbox-mlflow-serve\"}, model)",
+        "current": {"text": "All", "value": "$__all"}
+      },
+      {
+        "type": "query",
+        "name": "alias",
+        "label": "Alias",
+        "datasource": "Prometheus",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "sort": 1,
+        "query": "label_values(probe_success{job=\"blackbox-mlflow-serve\"}, alias)",
+        "current": {"text": "All", "value": "$__all"}
+      }
+    ]
+  }
+}

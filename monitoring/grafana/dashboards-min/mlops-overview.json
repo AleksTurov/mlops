@@ -1,0 +1,63 @@
+{
+  "title": "MLOps Overview",
+  "uid": "mlops-overview",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "table",
+      "title": "Service Up",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 8},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "up",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Model Server Requests (5m)",
+      "gridPos": {"x": 0, "y": 8, "w": 12, "h": 6},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"model-server\"}[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Model Server 5xx (5m)",
+      "gridPos": {"x": 12, "y": 8, "w": 12, "h": 6},
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{job=\"model-server\",status=~\"5..\"}[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "Logs (All MLOps Containers)",
+      "gridPos": {"x": 0, "y": 14, "w": 24, "h": 10},
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "{container=~\"mlops-.*\"}",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "annotations": {"list": []},
+  "templating": {"list": []}
+}
