@@ -1,10 +1,12 @@
 import json
 import os
 import tempfile
+import time
 from typing import Any, Dict, Tuple, Literal, cast
 
 import mlflow
 import mlflow.sklearn
+from mlflow.entities import ViewType
 import numpy as np
 import pandas as pd
 from sklearn.calibration import CalibratedClassifierCV
@@ -18,6 +20,34 @@ from core.config import get_settings
 from core.logger import logger
 from db.crud import get_dataset, get_latest_dataset, load_dataset_rows
 from db.session import SessionLocal, init_db
+
+
+def _log_metric_safe(metric_name: str, value: float) -> None:
+    active_run = mlflow.active_run()
+    if active_run is None:
+        return
+
+    client = mlflow.tracking.MlflowClient()
+    run_id = active_run.info.run_id
+
+    try:
+        existing = client.get_run(run_id).data.metrics.get(metric_name)
+        if existing is not None and existing == value:
+            return
+    except Exception:
+        pass
+
+    timestamp = int(time.time() * 1000)
+    step = int(time.time() * 1000)
+
+    try:
+        client.log_metric(run_id, metric_name, value, timestamp=timestamp, step=step)
+    except Exception as exc:
+        message = str(exc).lower()
+        if "duplicate key" in message:
+            client.log_metric(run_id, metric_name, value, timestamp=timestamp + 1, step=step + 1)
+        else:
+            raise
 
 
 def _set_mlflow_env(settings) -> None:
@@ -77,6 +107,16 @@ def train_candidate(dataset_id: int | None = None, random_state: int = 42, test_
 
     mlflow.set_tracking_uri(settings.mlflow_tracking_uri)
     experiment_name = f"{settings.mlflow_experiment_name}_{dataset_name}"
+    client = mlflow.tracking.MlflowClient()
+    experiment = client.get_experiment_by_name(experiment_name)
+    if experiment is None:
+        deleted = [
+            exp
+            for exp in client.search_experiments(view_type=ViewType.ALL)
+            if exp.name == experiment_name and exp.lifecycle_stage == "deleted"
+        ]
+        if deleted:
+            client.restore_experiment(deleted[0].experiment_id)
     mlflow.set_experiment(experiment_name)
 
     X_train, X_valid, y_train, y_valid = train_test_split(
@@ -98,7 +138,7 @@ def train_candidate(dataset_id: int | None = None, random_state: int = 42, test_
 
             mlflow.log_param("model_name", name)
             mlflow.log_param("task_type", task_type)
-            mlflow.log_metric(metric_name, score)
+            _log_metric_safe(metric_name, score)
             mlflow.sklearn.log_model(model, artifact_path="model")
 
             logger.info("Model %s %s: %.4f", name, metric_name, score)
@@ -138,7 +178,7 @@ def train_candidate(dataset_id: int | None = None, random_state: int = 42, test_
     with mlflow.start_run(run_name="best_model"):
         mlflow.log_param("base_model", best_name)
         mlflow.log_param("task_type", task_type)
-        mlflow.log_metric(metric_name, final_score)
+        _log_metric_safe(metric_name, final_score)
         mlflow.log_param("dataset_name", dataset_name)
         mlflow.log_param("target_column", target_column)
 
@@ -168,8 +208,31 @@ def train_candidate(dataset_id: int | None = None, random_state: int = 42, test_
         model_info = mlflow.sklearn.log_model(
             final_model,
             artifact_path="model",
-            registered_model_name=model_name,
         )
+
+        try:
+            client.get_registered_model(model_name)
+        except Exception:
+            try:
+                client.create_registered_model(model_name)
+            except Exception as exc:
+                if "already exists" not in str(exc).lower():
+                    raise
+
+        try:
+            version_info = client.create_model_version(
+                name=model_name,
+                source=model_info.model_uri,
+                run_id=mlflow.active_run().info.run_id,
+            )
+            client.set_registered_model_alias(
+                model_name,
+                settings.mlflow_model_alias,
+                str(version_info.version),
+            )
+        except Exception as exc:
+            if "already exists" not in str(exc).lower():
+                raise
 
     logger.info("Best model: %s (%s %.4f)", best_name, metric_name, final_score)
     return model_name, final_score, str(model_info.registered_model_version), experiment_name

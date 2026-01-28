@@ -1,0 +1,124 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: MLOps Alerts
+    folder: MLOps
+    interval: 1m
+    rules:
+      - uid: service-down
+        title: Service Down (HTTP)
+        condition: C
+        for: 1m
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              expr: probe_success == 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              reducer: last
+              expression: A
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+                  reducer:
+                    type: last
+                  operator:
+                    type: and
+        noDataState: Alerting
+        execErrState: Alerting
+
+      - uid: model-5xx-rate
+        title: Model Server 5xx > 1%
+        condition: C
+        for: 5m
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              expr: (sum(rate(http_requests_total{job="model-server",status=~"5.."}[5m])) / sum(rate(http_requests_total{job="model-server"}[5m]))) * 100
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              reducer: last
+              expression: A
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [1]
+                  reducer:
+                    type: last
+                  operator:
+                    type: and
+        noDataState: OK
+        execErrState: Alerting
+
+      - uid: model-p95-latency
+        title: Model Server P95 > 500ms
+        condition: C
+        for: 5m
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              expr: histogram_quantile(0.95, sum(rate(http_request_duration_highr_seconds_bucket{job="model-server"}[5m])) by (le))
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              reducer: last
+              expression: A
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0.5]
+                  reducer:
+                    type: last
+                  operator:
+                    type: and
+        noDataState: OK
+        execErrState: Alerting

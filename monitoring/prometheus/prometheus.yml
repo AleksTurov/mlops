@@ -7,7 +7,79 @@ scrape_configs:
     static_configs:
       - targets: ["prometheus:9090"]
 
-  - job_name: "model-server"
+  - job_name: "mlflow-serve"
     metrics_path: /metrics
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 15s
+    relabel_configs:
+      - source_labels: [__meta_docker_container_label_mlflow_serve]
+        regex: true
+        action: keep
+      - source_labels: [__meta_docker_network_name]
+        regex: mlops_default
+        action: keep
+      - source_labels: [__meta_docker_network_ip]
+        regex: .+
+        action: keep
+      - source_labels: [__meta_docker_network_ip, __meta_docker_container_label_mlflow_port]
+        separator: ':'
+        regex: (.+):(.+)
+        target_label: __address__
+        replacement: $1:$2
+      - source_labels: [__meta_docker_container_label_mlflow_model]
+        target_label: model
+      - source_labels: [__meta_docker_container_label_mlflow_alias]
+        target_label: alias
+
+
+  - job_name: "blackbox-http"
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
     static_configs:
-      - targets: ["model-server:8000"]
+      - targets:
+          - http://mlflow:5000/health
+          - http://airflow-webserver:8080/health
+          - http://minio:9000/minio/health/live
+          - http://prometheus:9090/-/healthy
+          - http://loki:3100/ready
+          - http://grafana:3000/api/health
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  - job_name: "blackbox-mlflow-serve"
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 15s
+    relabel_configs:
+      - source_labels: [__meta_docker_container_label_mlflow_serve]
+        regex: true
+        action: keep
+      - source_labels: [__meta_docker_network_name]
+        regex: mlops_default
+        action: keep
+      - source_labels: [__meta_docker_network_ip]
+        regex: .+
+        action: keep
+      - source_labels: [__meta_docker_network_ip, __meta_docker_container_label_mlflow_port]
+        separator: ':'
+        regex: (.+):(.+)
+        target_label: __param_target
+        replacement: http://$1:$2/ping
+      - source_labels: [__param_target]
+        target_label: instance
+      - source_labels: [__meta_docker_container_label_mlflow_model]
+        target_label: model
+      - source_labels: [__meta_docker_container_label_mlflow_alias]
+        target_label: alias
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

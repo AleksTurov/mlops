@@ -113,3 +113,4 @@ pgdata/*
 !pgdata/.gitkeep
 pgdata
 minio_data
+monitoring/promtail/positions/positions.yaml

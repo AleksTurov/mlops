@@ -3,10 +3,14 @@ boto3==1.40.57
 psycopg2-binary==2.9.11
 fastapi==0.115.8
 uvicorn[standard]==0.29.0
-sqlalchemy==2.0.36
+sqlalchemy==2.0.46
 pandas==2.2.3
-scikit-learn==1.5.2
+scikit-learn==1.7.2
 joblib==1.4.2
 python-dotenv==1.0.1
 prometheus-fastapi-instrumentator==7.0.0
 requests==2.32.3
+numpy==1.26.4
+dotenv==0.9.9
+docker==7.1.0
+
