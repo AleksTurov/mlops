@@ -114,3 +114,4 @@ pgdata/*
 pgdata
 minio_data
 monitoring/promtail/positions/positions.yaml
+.env
