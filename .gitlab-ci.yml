@@ -1,12 +1,10 @@
 stages:
   - build
   - deploy
-
 variables:
   COMPOSE_FILE_DEV: "docker-compose.yml"
   COMPOSE_PROJECT_NAME_DEV: "mlops-dev"
   DOCKER_COMPOSE_TIMEOUT: "600"
-
 build_dev:
   stage: build
   tags:
@@ -37,7 +35,6 @@ build_dev:
     - docker compose -p "$COMPOSE_PROJECT_NAME_DEV" -f "$COMPOSE_FILE_DEV" build --pull
   timeout: 1h
   retry: 1
-
 deploy_dev:
   stage: deploy
   tags:
