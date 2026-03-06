@@ -5,7 +5,7 @@ global:
 scrape_configs:
   - job_name: "prometheus"
     static_configs:
-      - targets: ["prometheus:9090"]
+      - targets: ["127.0.0.1:9091"]
 
   - job_name: "mlflow-serve"
     metrics_path: /metrics
@@ -38,20 +38,31 @@ scrape_configs:
     params:
       module: [http_2xx]
     static_configs:
-      - targets:
-          - http://mlflow:5000/health
-          - http://airflow-webserver:8080/health
-          - http://minio:9000/minio/health/live
-          - http://prometheus:9090/-/healthy
-          - http://loki:3100/ready
-          - http://grafana:3000/api/health
+      - targets: [http://127.0.0.1:5000/health]
+        labels:
+          service: mlflow
+      - targets: [http://127.0.0.1:8885/health]
+        labels:
+          service: airflow
+      - targets: [http://127.0.0.1:9022/minio/health/live]
+        labels:
+          service: minio
+      - targets: [http://127.0.0.1:9091/-/healthy]
+        labels:
+          service: prometheus
+      - targets: [http://127.0.0.1:3100/ready]
+        labels:
+          service: loki
+      - targets: [http://127.0.0.1:3001/api/health]
+        labels:
+          service: grafana
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
       - source_labels: [__param_target]
         target_label: instance
       - target_label: __address__
-        replacement: blackbox-exporter:9115
+        replacement: 127.0.0.1:9115
 
   - job_name: "blackbox-mlflow-serve"
     metrics_path: /probe
@@ -82,4 +93,4 @@ scrape_configs:
       - source_labels: [__meta_docker_container_label_mlflow_alias]
         target_label: alias
       - target_label: __address__
-        replacement: blackbox-exporter:9115
+        replacement: 127.0.0.1:9115

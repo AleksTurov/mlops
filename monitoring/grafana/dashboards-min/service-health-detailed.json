@@ -12,7 +12,7 @@
       "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
       "datasource": "Prometheus",
       "targets": [
-        {"expr": "probe_success{job=\"blackbox-http\", instance=\"http://mlflow:5000/health\"}", "refId": "A"}
+        {"expr": "probe_success{job=\"blackbox-http\", service=\"mlflow\"}", "refId": "A"}
       ],
       "fieldConfig": {
         "defaults": {
@@ -31,7 +31,7 @@
       "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
       "datasource": "Prometheus",
       "targets": [
-        {"expr": "probe_success{job=\"blackbox-http\", instance=\"http://airflow-webserver:8080/health\"}", "refId": "A"}
+        {"expr": "probe_success{job=\"blackbox-http\", service=\"airflow\"}", "refId": "A"}
       ],
       "fieldConfig": {
         "defaults": {
@@ -50,7 +50,7 @@
       "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
       "datasource": "Prometheus",
       "targets": [
-        {"expr": "probe_success{job=\"blackbox-http\", instance=\"http://minio:9000/minio/health/live\"}", "refId": "A"}
+        {"expr": "probe_success{job=\"blackbox-http\", service=\"minio\"}", "refId": "A"}
       ],
       "fieldConfig": {
         "defaults": {
@@ -69,7 +69,7 @@
       "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
       "datasource": "Prometheus",
       "targets": [
-        {"expr": "probe_success{job=\"blackbox-http\", instance=\"http://prometheus:9090/-/healthy\"}", "refId": "A"}
+        {"expr": "probe_success{job=\"blackbox-http\", service=\"prometheus\"}", "refId": "A"}
       ],
       "fieldConfig": {
         "defaults": {
@@ -88,7 +88,7 @@
       "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
       "datasource": "Prometheus",
       "targets": [
-        {"expr": "probe_success{job=\"blackbox-http\", instance=\"http://loki:3100/ready\"}", "refId": "A"}
+        {"expr": "probe_success{job=\"blackbox-http\", service=\"loki\"}", "refId": "A"}
       ],
       "fieldConfig": {
         "defaults": {
@@ -107,7 +107,7 @@
       "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
       "datasource": "Prometheus",
       "targets": [
-        {"expr": "probe_success{job=\"blackbox-http\", instance=\"http://grafana:3000/api/health\"}", "refId": "A"}
+        {"expr": "probe_success{job=\"blackbox-http\", service=\"grafana\"}", "refId": "A"}
       ],
       "fieldConfig": {
         "defaults": {

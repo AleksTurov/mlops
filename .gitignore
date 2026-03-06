@@ -113,3 +113,5 @@ pgdata
 minio_data
 monitoring/promtail/positions/positions.yaml
 .env
+mlops_app_db_data
+.pytest_cache
