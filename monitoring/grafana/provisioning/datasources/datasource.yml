@@ -5,23 +5,23 @@ datasources:
     type: prometheus
     uid: prometheus
     access: proxy
-    url: http://prometheus:9090
+    url: http://127.0.0.1:${PROMETHEUS_PORT}
     isDefault: true
 
   - name: Loki
     type: loki
     uid: loki
     access: proxy
-    url: http://loki:3100
+    url: http://127.0.0.1:${LOKI_PORT}
 
   - name: Postgres
     type: postgres
     uid: app-postgres
     access: proxy
-    url: app-db:5432
-    database: app_db
-    user: app_user
+    url: 127.0.0.1:${APP_DB_PORT}
+    database: ${APP_DB_NAME}
+    user: ${APP_DB_USER}
     secureJsonData:
-      password: app_password
+      password: ${APP_DB_PASSWORD}
     jsonData:
       sslmode: disable

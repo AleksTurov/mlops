@@ -76,6 +76,18 @@ Workflow (data scientist view)
 4) `mlflow-autoserve` auto-starts `mlflow models serve` for each alias.
 5) When ready, promote by switching MLflow alias to a new version.
 
+Pyfunc release flow (Test -> holdout -> Production)
+```bash
+# Train + log pyfunc + register + set alias Test + holdout validation
+python scripts/release_pyfunc.py --dataset-id <ID>
+
+# Same flow with smoke check + auto promote when candidate is better
+python scripts/release_pyfunc.py --dataset-id <ID> --smoke-url http://localhost:5000 --auto-promote --min-delta 0.0
+
+# Rollback Production alias to previous known-good version
+python scripts/release_pyfunc.py --rollback-model <MODEL_NAME> --rollback-version <VERSION>
+```
+
 
 Why MLflow here?
 MLflow provides model registry, run metadata, metrics comparison, and artifact storage. Even if you upload datasets directly, MLflow gives reproducibility, auditability, and easy promotion/rollback via aliases.

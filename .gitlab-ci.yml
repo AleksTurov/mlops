@@ -1,10 +1,12 @@
 stages:
   - build
   - deploy
+
 variables:
   COMPOSE_FILE_DEV: "docker-compose.yml"
+  COMPOSE_PROJECT_NAME_DEV: "mlops-dev"
   DOCKER_COMPOSE_TIMEOUT: "600"
-  
+
 build_dev:
   stage: build
   tags:
@@ -19,15 +21,23 @@ build_dev:
         - src/**/*
         - airflow/dags/**/*
         - monitoring/**/*
-        - nginx/**/*
         - .gitlab-ci.yml
+        - env.example
         - requirements.txt
         - requirements-airflow.txt
   script:
-    - set -eux
-    - docker compose --env-file .env -f "$COMPOSE_FILE_DEV" build --pull
+    - set -euxo pipefail
+    - set -a
+    - source /data/aturov/vault/scripts/export-env.sh kv/data/dev/mlops
+    - source /data/aturov/vault/scripts/export-env.sh kv/data/dev/grafana
+    - source /data/aturov/vault/scripts/export-env.sh kv/data/dev/minio
+    - source /data/aturov/vault/scripts/export-env.sh kv/data/dev/mlflow
+    - set +a
+    - docker compose -p "$COMPOSE_PROJECT_NAME_DEV" -f "$COMPOSE_FILE_DEV" config >/dev/null
+    - docker compose -p "$COMPOSE_PROJECT_NAME_DEV" -f "$COMPOSE_FILE_DEV" build --pull
   timeout: 1h
   retry: 1
+
 deploy_dev:
   stage: deploy
   tags:
@@ -42,15 +52,21 @@ deploy_dev:
         - src/**/*
         - airflow/dags/**/*
         - monitoring/**/*
-        - nginx/**/*
         - .gitlab-ci.yml
+        - env.example
         - requirements.txt
         - requirements-airflow.txt
   script:
-    - set -eux
-    - docker compose --env-file .env -p kpi-maps-dev -f "$COMPOSE_FILE_DEV" down --remove-orphans || true
-    - docker compose --env-file .env -p kpi-maps-dev -f "$COMPOSE_FILE_DEV" up -d --remove-orphans
-    - docker compose --env-file .env -p kpi-maps-dev -f "$COMPOSE_FILE_DEV" ps || true
-    - rm -rf logs/ || true
+    - set -euxo pipefail
+    - set -a
+    - source /data/aturov/vault/scripts/export-env.sh kv/data/dev/mlops
+    - source /data/aturov/vault/scripts/export-env.sh kv/data/dev/grafana
+    - source /data/aturov/vault/scripts/export-env.sh kv/data/dev/minio
+    - source /data/aturov/vault/scripts/export-env.sh kv/data/dev/mlflow
+    - set +a
+    - docker compose -p "$COMPOSE_PROJECT_NAME_DEV" -f "$COMPOSE_FILE_DEV" config >/dev/null
+    - docker compose -p "$COMPOSE_PROJECT_NAME_DEV" -f "$COMPOSE_FILE_DEV" down --remove-orphans || true
+    - docker compose -p "$COMPOSE_PROJECT_NAME_DEV" -f "$COMPOSE_FILE_DEV" up -d --remove-orphans
+    - docker compose -p "$COMPOSE_PROJECT_NAME_DEV" -f "$COMPOSE_FILE_DEV" ps
   timeout: 30m
   retry: 1
