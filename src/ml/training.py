@@ -219,20 +219,59 @@ def train_candidate(dataset_id: int | None = None, random_state: int = 42, test_
                 if "already exists" not in str(exc).lower():
                     raise
 
+        previous_champion_version = None
+        try:
+            previous_champion_version = str(
+                client.get_model_version_by_alias(model_name, settings.mlflow_model_alias).version
+            )
+        except Exception:
+            previous_champion_version = None
+
         try:
             version_info = client.create_model_version(
                 name=model_name,
                 source=model_info.model_uri,
                 run_id=mlflow.active_run().info.run_id,
             )
-            client.set_registered_model_alias(
-                model_name,
-                settings.mlflow_model_alias,
-                str(version_info.version),
-            )
+            model_version = str(version_info.version)
         except Exception as exc:
             if "already exists" not in str(exc).lower():
                 raise
+            model_version = None
+            for existing_version in client.search_model_versions(f"name='{model_name}'"):
+                if existing_version.run_id == mlflow.active_run().info.run_id:
+                    model_version = str(existing_version.version)
+                    break
+
+            if model_version is None:
+                versions = list(client.search_model_versions(f"name='{model_name}'"))
+                if not versions:
+                    raise
+                model_version = str(max(versions, key=lambda item: int(item.version)).version)
+
+        client.set_registered_model_alias(
+            model_name,
+            settings.mlflow_model_alias,
+            model_version,
+        )
+
+        challenger_version = previous_champion_version
+        if challenger_version == model_version:
+            challenger_version = None
+
+        if challenger_version is None:
+            versions = sorted(
+                client.search_model_versions(f"name='{model_name}'"),
+                key=lambda item: int(item.version),
+                reverse=True,
+            )
+            for existing_version in versions:
+                if str(existing_version.version) != model_version:
+                    challenger_version = str(existing_version.version)
+                    break
+
+        if challenger_version is not None:
+            client.set_registered_model_alias(model_name, "challenger", challenger_version)
 
     logger.info("Best model: %s (%s %.4f)", best_name, metric_name, final_score)
     return model_name, final_score, str(model_info.registered_model_version), experiment_name
