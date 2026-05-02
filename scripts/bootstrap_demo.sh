@@ -65,6 +65,7 @@ cat <<EOF
 - Prometheus:http://localhost:${PROMETHEUS_PORT}
 
 [bootstrap] Next steps:
-- В MLflow проверьте зарегистрированные модели и alias ${MLFLOW_MODEL_ALIAS:-Production}.
+- В MLflow проверьте зарегистрированные модели и alias ${MLFLOW_MODEL_ALIAS:-champion}.
+- Для проверки кандидата переведите новую версию в alias challenger.
 - В Grafana откройте дашборд Service Health Detailed.
 EOF

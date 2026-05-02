@@ -8,7 +8,7 @@ from prometheus_client import Gauge, start_http_server
 MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
 EXPORTER_PORT = int(os.getenv("MLFLOW_EXPORTER_PORT", "9101"))
 POLL_SECONDS = int(os.getenv("MLFLOW_EXPORTER_POLL_SECONDS", "30"))
-ALIASES = [a.strip() for a in os.getenv("MLFLOW_EXPORTER_ALIASES", "Production").split(",") if a.strip()]
+ALIASES = [a.strip() for a in os.getenv("MLFLOW_EXPORTER_ALIASES", "champion").split(",") if a.strip()]
 
 models_total = Gauge("mlflow_registered_models_total", "Total registered models")
 model_versions_total = Gauge(

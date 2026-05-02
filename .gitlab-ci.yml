@@ -3,8 +3,9 @@ stages:
   - deploy
 variables:
   COMPOSE_FILE_DEV: "docker-compose.yml"
-  COMPOSE_PROJECT_NAME_DEV: "mlops-dev"
+  COMPOSE_PROJECT_NAME_DEV: "mlops"
   DOCKER_COMPOSE_TIMEOUT: "600"
+  GIT_CLEAN_FLAGS: "-ffdx -e monitoring/promtail/positions/ -e monitoring/promtail/positions/positions.yaml"
 build_dev:
   stage: build
   tags:
@@ -15,14 +16,10 @@ build_dev:
       changes:
         - docker-compose.yml
         - Dockerfile
-        - Dockerfile.airflow
         - src/**/*
-        - airflow/dags/**/*
         - monitoring/**/*
         - .gitlab-ci.yml
-        - env.example
         - requirements.txt
-        - requirements-airflow.txt
   script:
     - set -euxo pipefail
     - set -a
@@ -30,9 +27,9 @@ build_dev:
     - source /data/aturov/vault/scripts/export-env.sh kv/data/dev/grafana
     - source /data/aturov/vault/scripts/export-env.sh kv/data/dev/minio
     - source /data/aturov/vault/scripts/export-env.sh kv/data/dev/mlflow
+    - source /data/aturov/vault/scripts/export-env.sh kv/data/dev/airflow
     - set +a
-    - docker compose -p "$COMPOSE_PROJECT_NAME_DEV" -f "$COMPOSE_FILE_DEV" config >/dev/null
-    - docker compose -p "$COMPOSE_PROJECT_NAME_DEV" -f "$COMPOSE_FILE_DEV" build --pull
+    - DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 docker compose -p "$COMPOSE_PROJECT_NAME_DEV" -f "$COMPOSE_FILE_DEV" build --pull
   timeout: 1h
   retry: 1
 deploy_dev:
@@ -45,14 +42,10 @@ deploy_dev:
       changes:
         - docker-compose.yml
         - Dockerfile
-        - Dockerfile.airflow
         - src/**/*
-        - airflow/dags/**/*
         - monitoring/**/*
         - .gitlab-ci.yml
-        - env.example
         - requirements.txt
-        - requirements-airflow.txt
   script:
     - set -euxo pipefail
     - set -a
@@ -60,8 +53,8 @@ deploy_dev:
     - source /data/aturov/vault/scripts/export-env.sh kv/data/dev/grafana
     - source /data/aturov/vault/scripts/export-env.sh kv/data/dev/minio
     - source /data/aturov/vault/scripts/export-env.sh kv/data/dev/mlflow
+    - source /data/aturov/vault/scripts/export-env.sh kv/data/dev/airflow
     - set +a
-    - docker compose -p "$COMPOSE_PROJECT_NAME_DEV" -f "$COMPOSE_FILE_DEV" config >/dev/null
     - docker compose -p "$COMPOSE_PROJECT_NAME_DEV" -f "$COMPOSE_FILE_DEV" down --remove-orphans || true
     - docker compose -p "$COMPOSE_PROJECT_NAME_DEV" -f "$COMPOSE_FILE_DEV" up -d --remove-orphans
     - docker compose -p "$COMPOSE_PROJECT_NAME_DEV" -f "$COMPOSE_FILE_DEV" ps

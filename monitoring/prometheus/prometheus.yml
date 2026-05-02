@@ -41,7 +41,7 @@ scrape_configs:
       - targets: [http://127.0.0.1:5000/health]
         labels:
           service: mlflow
-      - targets: [http://127.0.0.1:8885/health]
+      - targets: [http://127.0.0.1:__AIRFLOW_WEB_PORT__/health]
         labels:
           service: airflow
       - targets: [http://127.0.0.1:9022/minio/health/live]
@@ -56,6 +56,12 @@ scrape_configs:
       - targets: [http://127.0.0.1:3001/api/health]
         labels:
           service: grafana
+      - targets: [https://127.0.0.1:8200/]
+        labels:
+          service: vault
+      - targets: [http://127.0.0.1:5010/health]
+        labels:
+          service: autoserve
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
@@ -92,5 +98,21 @@ scrape_configs:
         target_label: model
       - source_labels: [__meta_docker_container_label_mlflow_alias]
         target_label: alias
+      - target_label: __address__
+        replacement: 127.0.0.1:9115
+
+  - job_name: "blackbox-tcp"
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    static_configs:
+      - targets: [127.0.0.1:6432]
+        labels:
+          service: mlflow-db
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
       - target_label: __address__
         replacement: 127.0.0.1:9115

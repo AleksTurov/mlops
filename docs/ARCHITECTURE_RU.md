@@ -1,178 +1,286 @@
 # Архитектура и поток данных (RU)
 
-Ниже — максимально подробное описание архитектуры, потоков данных и эксплуатации. Документ рассчитан на пользователя, который запускает стек впервые и хочет понимать, что где происходит, как проверять корректность и куда смотреть при ошибках.
+Ниже — подробное практическое описание архитектуры, потоков данных и эксплуатации. Цель документа — не только перечислить сервисы, но и объяснить **что именно происходит по шагам**, какой компонент за что отвечает, какие данные где лежат и как быстро проверить, что контур работает корректно.
 
 ---
 
 ## 1) Общая идея
-Стек организован как **минимальный MLOps‑контур**:
+Проект реализует минимальный, но полноценный MLOps‑контур:
 - MLflow хранит эксперименты, метрики и registry моделей.
 - MinIO хранит артефакты моделей (S3‑совместимое хранилище).
-- Airflow выполняет пакетные задачи (данные, обучение, batch‑инференс).
-- Автоматический сервинг строится на **MLflow Serve** контейнерах, которые поднимаются по alias.
-- Наблюдаемость обеспечивается Prometheus + Grafana + Loki.
+- Airflow выполняет пакетные задачи (данные, обучение, batch‑инференс, мониторинг).
+- Автоматический онлайн‑сервинг строится на **MLflow Serve** контейнерах, которые поднимаются по alias (`champion`, `challenger`).
+- Наблюдаемость обеспечивается Prometheus + Grafana + Loki/Promtail + Blackbox.
 
-Цель — быстро получить **сквозную историю**: данные → обучение → alias → сервинг → мониторинг.
+Практическая цель: получить прозрачную цепочку **данные → обучение → версия модели → alias → онлайн/батч инференс → мониторинг и диагностика**.
 
 ---
 
 ## 2) Компоненты и роли
 
 ### 2.1 MLflow и хранилища
-- **MLflow** — трекинг экспериментов, реестр моделей, alias‑ы.
-- **PostgreSQL (mlflow-db)** — метаданные MLflow (runs, metrics, registry, aliases).
-- **MinIO** — артефакты моделей и вспомогательные файлы.
+- **MLflow Tracking Server**
+	- Принимает логи runs (params, metrics, tags, artifacts).
+	- Хранит Model Registry (имя модели, версии, alias).
+	- Служит источником правды для autoserve: какая версия сейчас стоит за alias.
+- **PostgreSQL (`mlflow-db`)**
+	- Хранит метаданные MLflow (эксперименты, runs, версии моделей, alias‑привязки).
+	- Не хранит тяжелые бинарные артефакты модели.
+- **MinIO**
+	- Хранит артефакты run/model (MLmodel, сериализованная модель, schema/metrics файлы и пр.).
+	- Используется MLflow как artifact store.
 
-### 2.2 Airflow и данные
-- **Airflow** — пайплайны (DAG‑и) для данных и обучения.
-- **PostgreSQL (app-db)** — таблицы датасетов и предсказаний.
+### 2.2 Airflow и операционный контур данных
+- **Airflow Scheduler + Webserver**
+	- Планирует и исполняет DAG‑и по расписанию/триггеру.
+	- Даёт UI для ручного запуска/повтора задач.
+- **PostgreSQL приложения (внешний, не локальный сервис compose)**
+	- Хранит операционные данные проекта: исходные данные, промежуточные таблицы, результаты batch‑предсказаний.
+	- Используется DAG‑ами как рабочее хранилище и передаётся через Vault‑переменные (`APP_DB_*`/`APP_DB_URL`).
 
 ### 2.3 Сервинг моделей
-- **MLflow Autoserve** — сервис‑наблюдатель за registry, поднимает `mlflow models serve` по alias.
-- **MLflow Serve контейнеры** — отдельный контейнер на каждый alias (например, `iris_classifier_iris@Production`).
+- **MLflow Autoserve (`mlflow-autoserve`)**
+	- Периодически читает registry + alias из MLflow.
+	- Для каждой связки `model@alias` определяет target version.
+	- Поднимает/обновляет соответствующий `mlflow models serve` контейнер.
+	- При смене alias (например, challenger→новая версия) пересоздает serving‑контейнер.
+- **MLflow Serve контейнеры**
+	- Каждый контейнер отвечает за один alias конкретной модели.
+	- Пример логического имени: `model_name@challenger` или `model_name@champion`.
+	- По умолчанию контейнеры маркируются проектами: `champion -> models_champion`, `challenger -> models_challenger`.
+	- Имеют стандартный API: `/ping` и `/invocations`.
 
 ### 2.4 Наблюдаемость
-- **Prometheus** — сбор метрик доступности.
-- **Grafana** — визуализация и алерты.
-- **Loki/Promtail** — сбор Docker‑логов и поиск в Grafana.
-- **Blackbox exporter** — HTTP health‑checks, по которым строятся статусы.
+- **Prometheus**
+	- Снимает технические метрики доступности/latency с Blackbox exporter и инфраструктурных endpoints.
+- **Blackbox exporter**
+	- Выполняет HTTP‑пробы (`/ping`) по целям, включая alias‑сервинг контейнеры.
+- **Grafana**
+	- Визуализирует статус сервисов/alias и latency.
+	- Используется для оперативной диагностики и алертов.
+- **Loki + Promtail**
+	- Promtail читает Docker‑логи контейнеров и отправляет в Loki.
+	- Grafana Explore позволяет делать выборки логов по labels (`service`, `container`, `project`).
 
 ---
 
-## 3) Потоки данных (end‑to‑end)
+## 3) Что происходит после `docker compose up` (runtime bootstrap)
 
-### 3.1 Загрузка данных
+Ниже — реальная последовательность в рантайме:
+
+1. Поднимаются базовые инфраструктурные сервисы: БД, MinIO, MLflow, Airflow, мониторинг.
+2. MLflow подключается к `mlflow-db` и к MinIO как artifact store.
+3. Airflow поднимает scheduler/webserver и становится готов к DAG‑ам.
+4. Autoserve стартует и начинает цикл синхронизации с MLflow Registry.
+5. Если в registry есть модели с alias из `MLFLOW_SERVE_ALIASES`, autoserve поднимает serving‑контейнеры.
+6. Blackbox начинает health‑пробы `GET /ping` по всем целям.
+7. Prometheus собирает результаты проб, Grafana показывает статусы, Promtail отправляет логи в Loki.
+
+Итог: если alias назначены корректно, через короткое время в Grafana видно состояние как базовых сервисов, так и alias‑сервинга.
+
+---
+
+## 4) Потоки данных (end‑to‑end)
+
+### 4.1 Подготовка данных
 **DAG:** `dag_data_predictions`
-- Загружает тестовый датасет (например, iris) в **app-db**.
-- На выходе в БД появляются таблицы с данными.
+- Читает/генерирует входные данные (например, iris).
+- Пишет таблицы во внешнюю application DB.
+- Фиксирует операционный baseline для последующих DAG‑ов (обучение/инференс).
 
-### 3.2 Обучение
+Что важно проверять:
+- DAG завершился со статусом `success`.
+- Целевые таблицы во внешней application DB созданы и содержат записи.
+
+### 4.2 Обучение и регистрация модели
 **DAG:** `dag_training`
-- Запускает `ml.training.train_candidate()`.
-- Логирует параметры/метрики в MLflow.
-- Сохраняет артефакты в MinIO.
-- Регистрирует модель в MLflow Registry.
-- Автоматически присваивает alias `Production` лучшей версии.
+- Вызывает логику обучения (`ml.training.train_candidate()` или аналог).
+- Логирует в MLflow: params, metrics, tags, artifacts.
+- Регистрирует модель в Model Registry и создаёт новую версию.
+- Назначает alias (обычно `champion`/`challenger`) согласно правилам проекта.
 
-### 3.3 Сервинг по alias
+Что физически создаётся:
+- Запись run в MLflow DB.
+- Артефакты run/model в MinIO bucket.
+- Новая версия модели в Registry.
+- Привязка alias → version.
+
+### 4.3 Онлайн‑сервинг по alias
 **Сервис:** `mlflow-autoserve`
-- Сканирует registry и aliases.
-- Для каждого alias поднимает `mlflow models serve` контейнер.
-- При смене alias контейнер пересоздаётся на новую версию.
+- Читает alias‑состояние в registry.
+- Для каждого alias вычисляет нужную версию модели.
+- Поднимает `mlflow models serve` c URI вида `models:/<model_name>@<alias>` (или эквивалентом по версии).
+- Если alias переведен на другую версию — перезапускает контейнер на новую модель.
 
-### 3.4 Batch‑инференс
+Ключевой принцип: **сервинг следует alias, а не «последнему run»**.
+
+### 4.4 Batch‑инференс
 **DAG:** `dag_inference`
-- Загружает данные из app-db.
-- Вызывает модель (через MLflow) и пишет предсказания в app-db.
+- Читает батч входных данных из внешней application DB.
+- Загружает модель через MLflow (обычно через alias/версию).
+- Считает предсказания и пишет результат во внешнюю application DB.
 
-### 3.5 Мониторинг качества
+Назначение batch‑контура:
+- Регулярные пакетные расчеты для витрин/отчетов.
+- Сравнение с онлайн‑сценарием и контроль стабильности.
+
+### 4.5 Мониторинг качества
 **DAG:** `dag_model_monitoring`
-- Сравнивает candidate vs production.
-- Пишет метрики сравнения в MLflow.
+- Сравнивает candidate vs production (метрики качества и/или стабильности).
+- Логирует результаты сравнения в MLflow.
+- Даёт основу для решения «продвигать ли кандидат в champion».
 
 ---
 
-## 4) Механика MLflow Autoserve
+## 5) Механика MLflow Autoserve (детально)
 
-### 4.1 Что делает autoserve
-- Читает список моделей и их alias в MLflow Registry.
-- Для каждого alias определяет конкретную версию модели.
-- **Прод‑режим:** строит отдельный Docker‑image на версию модели и запускает контейнер `mlflow-serve-<model>-<alias>` из этого image.
-- Устанавливает метки контейнера: `mlflow_model`, `mlflow_alias`, `mlflow_version`, `mlflow_image`.
+### 5.1 Цикл синхронизации autoserve
+На каждой итерации autoserve делает:
+1) Запрос списка моделей в registry.
+2) Проверку alias из `MLFLOW_SERVE_ALIASES`.
+3) Разрешение alias → version.
+4) Сверку желаемого состояния с текущими контейнерами.
+5) Создание/обновление/остановку контейнеров для достижения нужного состояния.
 
-### 4.2 Как работает build per model version image
-- Для каждой версии модели формируется image вида `mlflow-model-<model>-v<version>`.
-- Image собирается через MLflow (`build_docker`), поэтому зависимости фиксируются **внутри image**.
-- При смене alias на другую версию контейнер пересоздаётся на новый image.
+### 5.2 Build per model version image
+В режиме «build per version»:
+- Для версии модели создаётся image `mlflow-model-<model>-v<version>`.
+- Сборка через MLflow фиксирует зависимости внутри image.
+- Это снижает риск несовместимостей (python/sklearn) между версиями модели.
 
-### 4.3 API MLflow Serve
-- `GET /ping` — проверка живости.
-- `POST /invocations` — инференс (MLflow scoring format).
+### 5.3 Метки контейнеров
+Autoserve пишет Docker labels, например:
+- `mlflow_model`
+- `mlflow_alias`
+- `mlflow_version`
+- `mlflow_image`
+- `com.docker.compose.project` (`models_champion`/`models_challenger`)
 
-### 4.4 Контракт входа
-Артефакты модели содержат:
-- `data_contract/input_schema.json` — список признаков.
-- `data_contract/sample_input.csv` — пример входа.
-- `metrics/validation_metrics.json` — итоговые метрики.
+Эти labels нужны для:
+- корректного reconcile‑цикла (понимать, что уже запущено),
+- удобной фильтрации в мониторинге/логах.
 
----
+### 5.4 API serving‑контейнера
+- `GET /ping` — health endpoint (используется blackbox‑пробами).
+- `POST /invocations` — инференс в формате MLflow scoring.
 
-## 5) Наблюдаемость (детально)
+### 5.5 Контракт входных данных
+Рекомендуется хранить вместе с моделью:
+- `data_contract/input_schema.json` — обязательные признаки и типы.
+- `data_contract/sample_input.csv` — пример валидного payload.
+- `metrics/validation_metrics.json` — метрики качества на валидации.
 
-### 5.1 Service Health
-**Grafana → Service Health Detailed**
-- Показывает `MLflow`, `Airflow`, `MinIO`, `Prometheus`, `Loki`, `Grafana`.
-- Показывает `MLflow Serve (aliases)` по `model@alias`.
-
-### 5.2 MLflow Serving dashboard
-**Grafana → MLflow Serving**
-- Статус alias по `probe_success`.
-- Latency (`probe_duration_seconds`).
-
-### 5.3 Логи
-**Grafana Explore (Loki)**
-- Фильтры: `container`, `service`, `project=mlops`.
-- Используется для диагностики проблем с DAG‑ами и сервингом.
-
-### 5.4 Почему нет /metrics
-MLflow Serve не предоставляет Prometheus `/metrics`, поэтому доступны только health‑checks через Blackbox.
-Если нужны RPS/latency/errors — требуется внешний gateway.
+Практический смысл: контракт уменьшает количество ошибок вида «не те поля/порядок/типы» при интеграции клиентов.
 
 ---
 
-## 6) Авто‑демо и первый запуск
+## 6) Наблюдаемость и что смотреть в первую очередь
+
+### 6.1 Service Health (Grafana)
+Дашборд показывает:
+- базовые сервисы (`MLflow`, `Airflow`, `MinIO`, `Prometheus`, `Loki`, `Grafana`),
+- alias‑сервинг (`model@alias`) как отдельные цели.
+
+Если тут `DOWN`, это обычно инфраструктурная проблема (контейнер не поднят, сеть, endpoint).
+
+### 6.2 MLflow Serving dashboard
+Полезные сигналы:
+- `probe_success` — доступность alias endpoint.
+- `probe_duration_seconds` — latency health‑ответа.
+
+Если `probe_success=0`, проверяем цепочку: alias в registry → контейнер autoserve → `/ping`.
+
+### 6.3 Логи через Loki
+В Grafana Explore обычно хватает фильтров:
+- `project=models_champion` или `project=models_challenger` (для serving‑контейнеров)
+- `project=mlops` (для базовой инфраструктуры)
+- `service=mlflow-autoserve` или `service=airflow`.
+
+Стандартный путь диагностики:
+1) Проверить ошибку на дашборде,
+2) Открыть логи соответствующего сервиса,
+3) Убедиться, что причина локализована (неверный alias, недоступный MLflow, ошибка зависимостей и т.д.).
+
+### 6.4 Почему у MLflow Serve нет `/metrics`
+Это нормальное поведение: у стандартного MLflow Serve нет native Prometheus‑метрик.
+Поэтому базовый мониторинг строится на:
+- blackbox health‑пробах,
+- логах,
+- косвенных SLI (доступность + latency ping).
+
+Для полноценных API‑метрик (RPS, p95, 5xx) обычно добавляют gateway/sidecar.
+
+---
+
+## 7) Первый запуск и быстрый сценарий проверки
+
 ```bash
-cp env.dev.example .env
-docker compose --env-file .env up -d --build
+set -a
+source /data/aturov/vault/scripts/export-env.sh kv/data/dev/mlops
+source /data/aturov/vault/scripts/export-env.sh kv/data/dev/grafana
+source /data/aturov/vault/scripts/export-env.sh kv/data/dev/minio
+source /data/aturov/vault/scripts/export-env.sh kv/data/dev/mlflow
+source /data/aturov/vault/scripts/export-env.sh kv/data/dev/airflow
+set +a
+docker compose up -d --build
 ```
-Контейнер `demo-bootstrap`:
-- ждёт готовности MLflow и Airflow,
-- делает health‑checks,
-- unpause/trigger `dag_data_predictions` и `dag_training`.
 
-Опционально сбросить эксперименты MLflow при старте:
-```
+Если используется `demo-bootstrap`, он обычно:
+- ждёт готовности MLflow/Airflow,
+- выполняет базовые health‑проверки,
+- триггерит/размораживает DAG‑и подготовки и обучения.
+
+Дополнительно (опционально):
+```bash
 BOOTSTRAP_RESET_MLFLOW=true
 ```
+Использовать только для «чистого» демо‑прогона, когда допустим сброс состояния экспериментов.
 
 ---
 
-## 7) Проверка сервинга (ручной smoke‑test)
+## 8) Ручной smoke‑test сервинга
 
-### 7.1 Найти контейнер
-```
+### 8.1 Найти serving‑контейнеры
+```bash
 docker ps --format '{{.Names}}' | grep mlflow-serve-
 ```
 
-### 7.2 Health‑check
-```
+### 8.2 Проверить health
+```bash
 docker run --rm --network mlops_default curlimages/curl:8.5.0 -sS \
 	http://<mlflow-serve-container>:5000/ping
 ```
+Ожидаем успешный ответ и отсутствие таймаута.
 
-### 7.3 Инференс
-```
+### 8.3 Проверить инференс
+```bash
 docker run --rm --network mlops_default curlimages/curl:8.5.0 -sS \
 	-H 'Content-Type: application/json' \
 	-d '{"dataframe_records":[{"feature_a":1,"feature_b":2}]}' \
 	http://<mlflow-serve-container>:5000/invocations
 ```
-Фактический порядок признаков берите из `data_contract/input_schema.json`.
+
+Важно: структура payload должна соответствовать `data_contract/input_schema.json`.
 
 ---
 
-## 8) Переменные окружения (.env)
+## 9) Переменные окружения (Vault export): что на что влияет
+
 Ключевые переменные:
-- `MLFLOW_TRACKING_URI` — URL MLflow внутри сети.
-- `MLFLOW_EXPERIMENT_NAME` — базовое имя эксперимента.
-- `MLFLOW_MODEL_NAME` — базовое имя модели.
-- `MLFLOW_SERVE_ALIASES` — aliases, которые отслеживает autoserve.
-- `S3_ARTIFACT_BUCKET` / `MLFLOW_S3_ENDPOINT_URL` — MinIO.
-- `AIRFLOW_WEB_PORT`, `MLFLOW_PORT`, `GRAFANA_PORT` и т.п. — внешние порты.
+- `MLFLOW_TRACKING_URI` — куда клиенты/сервисы отправляют MLflow API запросы.
+- `MLFLOW_EXPERIMENT_NAME` — имя эксперимента по умолчанию для логирования run.
+- `MLFLOW_MODEL_NAME` — базовое имя модели в registry.
+- `MLFLOW_SERVE_ALIASES` — какие alias autoserve обязан обслуживать (например, `champion,challenger`).
+- `MLFLOW_SERVE_ALIAS_PROJECTS` — соответствие alias→project (по умолчанию `champion=models_champion,challenger=models_challenger`).
+- `MLFLOW_SERVE_PROJECT_CHAMPION` / `MLFLOW_SERVE_PROJECT_CHALLENGER` — точечные override для конкретных alias.
+- `S3_ARTIFACT_BUCKET` / `MLFLOW_S3_ENDPOINT_URL` — куда MLflow пишет артефакты.
+- `AIRFLOW_WEB_PORT`, `MLFLOW_PORT`, `GRAFANA_PORT` и др. — внешние порты для UI/API.
+
+Операционное правило: если в Vault меняются alias/URI/порты, заново экспортируйте переменные перед `docker compose up` и затем проверяйте `docker compose config`.
 
 ---
 
-## 9) Основные адреса
+## 10) Основные адреса
 - MLflow: http://localhost:${MLFLOW_PORT}
 - Airflow: http://localhost:${AIRFLOW_WEB_PORT}
 - MinIO Console: http://localhost:${MINIO_CONSOLE_PORT}
@@ -182,38 +290,47 @@ docker run --rm --network mlops_default curlimages/curl:8.5.0 -sS \
 
 ---
 
-## 10) Типичные проблемы и решения
+## 11) Типичные проблемы и как локализовать
 
-### 10.1 Нет контейнера `mlflow-serve-*`
-- Проверьте, что alias `Production` назначен модели.
-- Посмотрите логи `mlflow-autoserve`.
+### 11.1 Нет контейнера `mlflow-serve-*`
+Проверка по шагам:
+1) Есть ли модель и alias в MLflow Registry.
+2) Входит ли alias в `MLFLOW_SERVE_ALIASES`.
+3) Есть ли ошибки в логах `mlflow-autoserve` (доступ к MLflow, сборка image, запуск контейнера).
 
-### 10.2 /metrics возвращает 404
-- Это ожидаемо для MLflow Serve.
-- Используйте health‑checks через Blackbox.
+### 11.2 `probe_success=0` в Grafana
+Обычно причина в одном из трёх мест:
+- контейнер сервинга не запущен,
+- endpoint недоступен по сети,
+- контейнер стартовал, но упал при инициализации модели.
 
-### 10.3 Предупреждения о версиях зависимостей
-- Возможны предупреждения из-за несовпадения `scikit-learn` или Python.
-- В прод‑режиме это устраняется сборкой image на версию модели (dependencies «запечены»).
+### 11.3 `/metrics` возвращает 404
+Это ожидаемо для MLflow Serve. Используйте blackbox + логи.
 
-### 10.4 Git не добавляет positions.yaml
-- Файл `monitoring/promtail/positions/positions.yaml` игнорируется в `.gitignore`.
+### 11.4 Предупреждения о версиях зависимостей
+Возможны на окружениях с разными версиями Python/библиотек.
+Стабильный путь — build per model version image.
 
----
-
-## 11) Что считать успехом демо
-- Все контейнеры `Up`.
-- DAG‑и завершаются без ошибок.
-- В MLflow есть модели и alias `Production`.
-- `mlflow-serve-*` поднялись и видны в Grafana.
-- Grafana показывает health‑статусы и логи без критических ошибок.
+### 11.5 Git не добавляет `positions.yaml`
+`monitoring/promtail/positions/positions.yaml` — runtime state файл, он игнорируется в `.gitignore`.
 
 ---
 
-## 12) Краткий чеклист (5 минут)
-1) `docker compose ps` → все сервисы `Up`.
+## 12) Что считать успешным состоянием платформы
+- Все критичные контейнеры в статусе `Up`.
+- DAG‑и подготовки/обучения выполняются в `success`.
+- В MLflow видны версии модели и alias (как минимум `champion`, опционально `challenger`).
+- Сервинг‑контейнеры `mlflow-serve-*` подняты по нужным alias.
+- Grafana показывает `UP` по сервисам и alias‑целям.
+- В логах нет постоянных критических ошибок (допускаются кратковременные стартовые предупреждения).
+
+---
+
+## 13) Краткий чеклист (5 минут)
+1) `docker compose ps` → базовые сервисы `Up`.
 2) Airflow → `dag_data_predictions` и `dag_training` в `success`.
-3) MLflow → есть модель и alias `Production`.
-4) `mlflow-autoserve` → в логах запуск `mlflow-serve-*`.
-5) Grafana → `Service Health Detailed` показывает `mlflow-serve-*` в `UP`.
+3) MLflow → есть версия модели и назначенный alias.
+4) `mlflow-autoserve` → в логах есть reconcile и запуск `mlflow-serve-*`.
+5) Grafana → `Service Health Detailed` показывает alias‑сервинг в `UP`.
+6) Smoke‑test `POST /invocations` возвращает валидный ответ.
 
