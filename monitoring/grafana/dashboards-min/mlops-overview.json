@@ -28,7 +28,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(probe_success{instance=~\".*mlflow-serve-.*\"})",
+          "expr": "sum(probe_success{job=\"blackbox-mlflow-serve\"})",
           "refId": "A"
         }
       ]
@@ -40,7 +40,7 @@
       "datasource": "Prometheus",
       "targets": [
         {
-          "expr": "sum(probe_success{instance=~\".*mlflow-serve-.*\"} == 0)",
+          "expr": "sum(probe_success{job=\"blackbox-mlflow-serve\"} == 0)",
           "refId": "A"
         }
       ]
@@ -52,7 +52,7 @@
       "datasource": "Loki",
       "targets": [
         {
-          "expr": "{project=~\"mlops|models_champion|models_challenger\"}",
+          "expr": "{service=~\"airflow-db|airflow-scheduler|airflow-webserver|app-db|blackbox-exporter|grafana|loki|minio|mlflow|mlflow-autoserve|mlflow-db|mlflow-serve|prometheus|promtail\"}",
           "refId": "A"
         }
       ]
