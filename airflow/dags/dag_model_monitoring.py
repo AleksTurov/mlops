@@ -16,7 +16,7 @@ def monitor_task() -> None:
 
 with DAG(
     dag_id="dag_model_monitoring",
-    description="Monitor candidate vs production metrics",
+    description="Monitor candidate vs champion metrics",
     schedule_interval="@daily",
     start_date=days_ago(1),
     catchup=False,

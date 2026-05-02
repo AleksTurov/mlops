@@ -92,7 +92,7 @@ def _build_prediction_rows(
 
 
 def run_inference() -> int:
-    """Load the production model and store predictions in the database."""
+    """Load the champion model and store predictions in the database."""
     settings = get_settings()
     _set_mlflow_env(settings)
 
@@ -128,7 +128,7 @@ def run_inference() -> int:
         model_version,
         task_type,
         model_alias=settings.mlflow_model_alias,
-        model_role="production",
+        model_role="champion",
     )
 
     with SessionLocal() as db:
@@ -138,8 +138,8 @@ def run_inference() -> int:
     return len(rows)
 
 
-def run_shadow_inference(test_alias: str = "test") -> int:
-    """Run inference with production and test aliases and store paired predictions."""
+def run_shadow_inference(challenger_alias: str = "challenger") -> int:
+    """Run inference with champion and challenger aliases and store paired predictions."""
     settings = get_settings()
     _set_mlflow_env(settings)
 
@@ -159,53 +159,57 @@ def run_shadow_inference(test_alias: str = "test") -> int:
         )
         return 0
     try:
-        test_version = client.get_model_version_by_alias(model_name, test_alias).version
+        challenger_version = client.get_model_version_by_alias(model_name, challenger_alias).version
     except mlflow.exceptions.RestException as exc:
-        logger.warning("Shadow inference skipped: alias %s not found (%s)", test_alias, exc)
+        logger.warning("Shadow inference skipped: alias %s not found (%s)", challenger_alias, exc)
         return 0
 
-    prod_uri = f"models:/{model_name}@{settings.mlflow_model_alias}"
-    test_uri = f"models:/{model_name}@{test_alias}"
+    champion_uri = f"models:/{model_name}@{settings.mlflow_model_alias}"
+    challenger_uri = f"models:/{model_name}@{challenger_alias}"
 
-    prod_model = mlflow.sklearn.load_model(prod_uri)
-    test_model = mlflow.sklearn.load_model(test_uri)
+    champion_model = mlflow.sklearn.load_model(champion_uri)
+    challenger_model = mlflow.sklearn.load_model(challenger_uri)
 
     features = dataset_df.drop(columns=[target_column]) if target_column in dataset_df.columns else dataset_df
 
-    prod_preds = prod_model.predict(features)
-    prod_probas = prod_model.predict_proba(features) if task_type == "classification" else None
+    champion_preds = champion_model.predict(features)
+    champion_probas = champion_model.predict_proba(features) if task_type == "classification" else None
 
-    test_preds = test_model.predict(features)
-    test_probas = test_model.predict_proba(features) if task_type == "classification" else None
+    challenger_preds = challenger_model.predict(features)
+    challenger_probas = challenger_model.predict_proba(features) if task_type == "classification" else None
 
     run_group_id = str(uuid.uuid4())
 
-    prod_rows = _build_prediction_rows(
+    champion_rows = _build_prediction_rows(
         features,
-        prod_preds,
-        prod_probas,
+        champion_preds,
+        champion_probas,
         model_name,
         prod_version,
         task_type,
         model_alias=settings.mlflow_model_alias,
         run_group_id=run_group_id,
-        model_role="production",
+        model_role="champion",
     )
 
-    test_rows = _build_prediction_rows(
+    challenger_rows = _build_prediction_rows(
         features,
-        test_preds,
-        test_probas,
+        challenger_preds,
+        challenger_probas,
         model_name,
-        test_version,
+        challenger_version,
         task_type,
-        model_alias=test_alias,
+        model_alias=challenger_alias,
         run_group_id=run_group_id,
-        model_role="test",
+        model_role="challenger",
     )
 
     with SessionLocal() as db:
-        insert_predictions(db, prod_rows + test_rows)
+        insert_predictions(db, champion_rows + challenger_rows)
 
-    logger.info("Stored %s shadow predictions (group %s).", len(prod_rows) + len(test_rows), run_group_id)
-    return len(prod_rows) + len(test_rows)
+    logger.info(
+        "Stored %s shadow predictions (group %s).",
+        len(champion_rows) + len(challenger_rows),
+        run_group_id,
+    )
+    return len(champion_rows) + len(challenger_rows)

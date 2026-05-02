@@ -1,30 +1,65 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env sh
+set -eu
+
+http_ok() {
+  python - "$1" <<'PY'
+import sys
+import urllib.request
+
+url = sys.argv[1]
+try:
+    with urllib.request.urlopen(url, timeout=5) as response:
+        sys.exit(0 if response.status < 400 else 1)
+except Exception:
+    sys.exit(1)
+PY
+}
 
 wait_for() {
-  local name="$1"
-  local url="$2"
+  name="$1"
+  url="$2"
   echo "[bootstrap] waiting for ${name}..."
-  until curl -sf "$url" >/dev/null 2>&1; do
+  until http_ok "$url"; do
     sleep 2
   done
   echo "[bootstrap] ${name} is ready"
 }
 
 check_url() {
-  local name="$1"
-  local url="$2"
-  if curl -sf "$url" >/dev/null 2>&1; then
+  name="$1"
+  url="$2"
+  if http_ok "$url"; then
     echo "[check] ${name}: OK (${url})"
   else
     echo "[check] ${name}: FAIL (${url})"
   fi
 }
 
+run_prediction_trace_test() {
+  attempts="${BOOTSTRAP_TEST_RETRIES:-20}"
+  delay_seconds="${BOOTSTRAP_TEST_RETRY_DELAY_SECONDS:-5}"
+  attempt=1
+
+  echo "[bootstrap] running prediction integration test to generate traces"
+  while [ "$attempt" -le "$attempts" ]; do
+    if RUN_INTEGRATION_TESTS=1 PREDICTION_TEST_IN_CONTAINER=1 python -m pytest -q /opt/airflow/test/test_integration_predictions.py; then
+      echo "[bootstrap] prediction integration test passed"
+      return 0
+    fi
+
+    echo "[bootstrap] prediction integration test failed on attempt ${attempt}/${attempts}; retrying in ${delay_seconds}s"
+    attempt=$((attempt + 1))
+    sleep "$delay_seconds"
+  done
+
+  echo "[bootstrap] prediction integration test failed after ${attempts} attempts"
+  return 1
+}
+
 wait_for "MLflow" "http://mlflow:5000/health"
 wait_for "Airflow" "http://airflow-webserver:8080/health"
 
-if [[ "${BOOTSTRAP_RESET_MLFLOW:-false}" == "true" ]]; then
+if [ "${BOOTSTRAP_RESET_MLFLOW:-false}" = "true" ]; then
   echo "[bootstrap] cleaning MLflow experiments (soft delete, except Default)"
   python - <<'PY'
 import mlflow
@@ -48,6 +83,8 @@ airflow dags unpause dag_training || true
 airflow dags trigger dag_data_predictions || true
 airflow dags trigger dag_training || true
 
+run_prediction_trace_test
+
 check_url "MLflow" "http://mlflow:5000/health"
 check_url "Airflow" "http://airflow-webserver:8080/health"
 check_url "MinIO" "http://minio:9000/minio/health/live"
@@ -65,6 +102,8 @@ cat <<EOF
 - Prometheus:http://localhost:${PROMETHEUS_PORT}
 
 [bootstrap] Next steps:
-- В MLflow проверьте зарегистрированные модели и alias ${MLFLOW_MODEL_ALIAS:-Production}.
+- В MLflow проверьте зарегистрированные модели и alias ${MLFLOW_MODEL_ALIAS:-champion}.
+- В MLflow откройте experiment iris-classification_iris и вкладку Traces после bootstrap test run.
+- Для проверки кандидата переведите новую версию в alias challenger.
 - В Grafana откройте дашборд Service Health Detailed.
 EOF

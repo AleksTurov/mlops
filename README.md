@@ -1,116 +1,140 @@
-# MLOps Reference Stack (MLflow + Airflow + Prometheus + Loki)
-
-Architecture (visual)
+# MLOps Platform: Alias-Driven Deployment with MLflow
 
 ![Architecture](docs/Mlops_01.png)
 
-![Service Health (Grafana)](docs/Mlops_02.png)
+This repository is a self-contained public demo of local MLOps on a budget.
 
-This repository provides a minimal, script-first MLOps stack for data scientists (Phase 1):
-- you run experiments locally or in notebooks,
-- every training run is logged to MLflow (params/metrics/artifacts),
-- artifacts are stored in MinIO,
-- MLflow models are served via standard `mlflow models serve` containers (auto-managed),
-- Prometheus/Grafana monitor all services.
+It starts a full stack with one command:
 
-Key components
+```bash
+docker compose up -d --build
+```
+
+The stack includes:
 - MLflow + PostgreSQL for tracking and model registry
-- MinIO for artifact storage (S3-compatible)
-- Airflow for batch and scheduled tasks only
-- MLflow autoserve watcher (spawns `mlflow models serve` per alias)
-- Prometheus + Grafana (metrics dashboards)
-- Loki + Promtail (log aggregation)
+- MinIO for artifacts
+- Airflow + PostgreSQL for orchestration and demo bootstrap
+- App PostgreSQL for demo data and predictions
+- MLflow autoserve for alias-driven online serving
+- Prometheus + Grafana + Loki + Promtail for observability
 
-Docs
+## Core Idea
+
+Deployment is not a pipeline.
+
+Deployment is a label.
+
+By switching MLflow aliases, this stack can:
+- deploy a new model instantly
+- avoid downtime during rollout
+- roll back in seconds
+
+## Simple Flow
+
+```mermaid
+flowchart LR
+    A[Train in Airflow] --> B[Register model in MLflow]
+    B --> C[Assign alias champion or challenger]
+    C --> D[Autoserve detects alias change]
+    D --> E[MLflow Serve container is recreated]
+    E --> F[Prometheus and Grafana show health]
+```
+
+## Quick Start
+
+```bash
+docker compose up -d --build
+```
+
+Optional customization:
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+Default demo credentials:
+- Airflow UI: `admin` / `admin`
+- Grafana: `admin` / `admin`
+- MinIO: `minioadmin` / `minioadmin123`
+
+Default demo ports:
+- MLflow UI: `http://localhost:15000`
+- Airflow UI: `http://localhost:18885`
+- MinIO API: `http://localhost:19000`
+- MinIO Console: `http://localhost:19023`
+- Grafana: `http://localhost:13000`
+- Prometheus: `http://localhost:19090`
+- Loki: `http://localhost:13100`
+- Autoserve health: `http://localhost:15010/health`
+
+The public repo does not use Vault and runs under the isolated Compose project `mlops-demo` with network `mlops-demo_default`.
+
+## What Starts Automatically
+
+- MinIO bucket bootstrap
+- Airflow metadata initialization
+- Demo admin user creation in Airflow
+- `dag_data_predictions` and `dag_training`
+- alias-driven autoserve for `champion` and `challenger`
+- prediction integration test from bootstrap
+- explicit MLflow traces for the demo experiment
+
+## Demo Scenario
+
+This is the stage-friendly flow:
+
+1. Train model.
+2. Assign alias.
+3. Watch auto-deploy.
+
+In this repository the first two steps already happen during bootstrap, so the live part of the demo is the alias switch and the instant serving update.
+
+## Traditional vs This Approach
+
+| Step | Traditional | This project |
+|---|---|---|
+| Deployment | CI/CD pipeline | Alias switch |
+| Rollback | Manual redeploy | Instant alias move |
+| Serving | Custom API service | MLflow serve |
+| Release target | Environment-specific | Registry alias |
+| Validation | Separate release stage | `challenger` side-by-side |
+
+## How To See Demo Traces
+
+1. Open MLflow at `http://localhost:15000`.
+2. Open experiment `iris-classification_iris`.
+3. Open the `Traces` tab.
+4. You should see traces created by the bootstrap prediction test.
+5. If you want to replay them manually, run:
+
+```bash
+RUN_INTEGRATION_TESTS=1 pytest -q test/test_integration_predictions.py
+```
+
+That test:
+- resolves model versions by experiment name and alias
+- sends real `/invocations` requests to `champion` and `challenger`
+- writes explicit MLflow traces into the demo experiment
+
+## Why This Architecture Works
+
+- It keeps deployment semantics inside the model registry.
+- It avoids a custom serving control plane.
+- It makes rollback a metadata operation instead of an infrastructure operation.
+- It gives one reproducible local stack for demos, development, and debugging.
+- It keeps observability close to the serving path.
+
+## Docs
+
 - Demo guide (EN): [docs/DEMO.md](docs/DEMO.md)
-- Architecture and end-to-end flow (EN): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- Architecture (RU): [docs/ARCHITECTURE_RU.md](docs/ARCHITECTURE_RU.md)
-- Scripts & DAGs (EN): [docs/SCRIPTS.md](docs/SCRIPTS.md)
+- Architecture and flow (EN): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Architecture and selling points (RU): [docs/ARCHITECTURE_RU.md](docs/ARCHITECTURE_RU.md)
+- Python toolkit docs: [README_library.md](README_library.md)
 
-Local Python environment (optional)
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+## Notes
 
-Quick start
-```bash
-cp env.dev.example .env
-docker compose --env-file .env up -d --build
-```
-
-Auto-demo runs via the `demo-bootstrap` container and does:
-- health checks for core services,
-- unpause/trigger DAGs `dag_data_predictions` and `dag_training`.
-
-If you need to reset MLflow experiments on start, add to .env:
-```
-BOOTSTRAP_RESET_MLFLOW=true
-```
-
-Demo flow (auto on first start)
-1) `demo-bootstrap` triggers `dag_data_predictions` (loads dataset into app-db).
-2) `demo-bootstrap` triggers `dag_training` (trains models, logs metrics in MLflow).
-3) Training automatically assigns alias `Production` to the best version.
-4) `mlflow-autoserve` starts `mlflow models serve` for all aliases.
-5) Prometheus/Grafana start collecting health signals immediately.
-
-Main endpoints (ports are defined in .env)
-- MLflow UI: http://localhost:${MLFLOW_PORT}
-- Airflow UI: http://localhost:${AIRFLOW_WEB_PORT}
-- MinIO Console: http://localhost:${MINIO_CONSOLE_PORT}
-- Grafana: http://localhost:${GRAFANA_PORT}
-- Prometheus: http://localhost:${PROMETHEUS_PORT}
-- Loki: http://localhost:${LOKI_PORT}
-
-Dashboards
-- Grafana dashboards are provisioned from [monitoring/grafana/dashboards-min](monitoring/grafana/dashboards-min)
-- Use dashboard "Service Health Detailed" to verify each service is alive.
-- Use dashboard "MLflow Serving" to inspect model serving status and /ping health.
-
-Workflow (data scientist view)
-1) Build features in notebooks, Airflow, or service.
-2) Train locally and log to MLflow (params/metrics/artifacts).
-3) Assign alias (for example, `Production`) to the candidate model.
-4) `mlflow-autoserve` auto-starts `mlflow models serve` for each alias.
-5) When ready, promote by switching MLflow alias to a new version.
-
-Pyfunc release flow (Test -> holdout -> Production)
-```bash
-# Train + log pyfunc + register + set alias Test + holdout validation
-python scripts/release_pyfunc.py --dataset-id <ID>
-
-# Same flow with smoke check + auto promote when candidate is better
-python scripts/release_pyfunc.py --dataset-id <ID> --smoke-url http://localhost:5000 --auto-promote --min-delta 0.0
-
-# Rollback Production alias to previous known-good version
-python scripts/release_pyfunc.py --rollback-model <MODEL_NAME> --rollback-version <VERSION>
-```
-
-
-Why MLflow here?
-MLflow provides model registry, run metadata, metrics comparison, and artifact storage. Even if you upload datasets directly, MLflow gives reproducibility, auditability, and easy promotion/rollback via aliases.
-
-Python toolkit
-Install and use the CLI from [README_library.md](README_library.md) to automate MLflow aliases (Phase 1).
-
-How to call MLflow served models (inside Docker network):
-```bash
-docker ps --format '{{.Names}}' | grep mlflow-serve-
-docker run --rm --network mlops_default curlimages/curl:8.5.0 -sS http://<mlflow-serve-container>:8080/ping
-```
-Inference example:
-```bash
-docker run --rm --network mlops_default curlimages/curl:8.5.0 -sS \
-	-H 'Content-Type: application/json' \
-	-d '{"dataframe_records":[{"feature_a":1,"feature_b":2}]}' \
-	http://<mlflow-serve-container>:8080/invocations
-```
-Get the expected feature order from MLflow artifacts: `data_contract/input_schema.json`.
-
-Notes
-- Airflow is kept for scheduled/batch workflows only (daily/weekly retraining or batch predictions).
-- Online inference is performed via MLflow serving containers.
-- Legacy model server is still available via Compose profile: `--profile legacy`.
+- Online inference is handled by alias-driven MLflow Serve containers.
+- `GET /metrics` returning `404` on serve containers is expected; health is tracked through `/ping` via Blackbox.
+- The current demo payload source is `data_contract/sample_input.csv`, which is logged during training and reused by the integration test.
 

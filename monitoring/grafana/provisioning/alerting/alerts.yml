@@ -46,7 +46,7 @@ groups:
         execErrState: Alerting
 
       - uid: model-5xx-rate
-        title: Model Server 5xx > 1%
+        title: Served Model Endpoint Down
         condition: C
         for: 5m
         data:
@@ -56,7 +56,7 @@ groups:
               from: 300
               to: 0
             model:
-              expr: (sum(rate(http_requests_total{job="model-server",status=~"5.."}[5m])) / sum(rate(http_requests_total{job="model-server"}[5m]))) * 100
+              expr: sum(probe_success{instance=~".*mlflow-serve-.*"} == 0)
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -76,7 +76,7 @@ groups:
               conditions:
                 - evaluator:
                     type: gt
-                    params: [1]
+                    params: [0]
                   reducer:
                     type: last
                   operator:
@@ -85,7 +85,7 @@ groups:
         execErrState: Alerting
 
       - uid: model-p95-latency
-        title: Model Server P95 > 500ms
+        title: Served Model Probe Latency > 500ms
         condition: C
         for: 5m
         data:
@@ -95,7 +95,7 @@ groups:
               from: 300
               to: 0
             model:
-              expr: histogram_quantile(0.95, sum(rate(http_request_duration_highr_seconds_bucket{job="model-server"}[5m])) by (le))
+              expr: max(probe_duration_seconds{instance=~".*mlflow-serve-.*"})
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A

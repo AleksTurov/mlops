@@ -10,7 +10,7 @@ def _alias_cmd(args: argparse.Namespace):
         set_alias(args.model_name, args.version, args.alias, args.tracking_uri)
         print("ok")
     elif args.action == "status":
-        aliases = args.aliases.split(",") if args.aliases else ["dev", "test", "Production"]
+        aliases = args.aliases.split(",") if args.aliases else ["challenger", "champion"]
         data = get_alias_status(args.model_name, aliases, args.tracking_uri)
         print(json.dumps(data, indent=2))
 

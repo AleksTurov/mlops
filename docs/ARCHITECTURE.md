@@ -1,55 +1,90 @@
 # Architecture and System Flow (EN)
 
-## 1) Service roles
-- **MLflow** — model registry and experiment tracking.
-- **PostgreSQL (mlflow-db)** — MLflow metadata.
-- **MinIO** — model artifacts (S3-compatible).
-- **PostgreSQL (app-db)** — datasets and predictions.
-- **Airflow** — batch pipelines: data load, training, inference, monitoring.
-- **MLflow Autoserve** — watcher that starts MLflow Serve for each alias.
-- **MLflow Serve containers** — online inference per model+alias.
-- **Prometheus/Grafana** — health/metrics dashboards.
-- **Loki/Promtail** — log aggregation and search in Grafana.
-- **Blackbox exporter** — HTTP health probes.
+## 1) Service Roles
+- **MLflow**: experiment tracking, model registry, aliases, traces.
+- **PostgreSQL (`mlflow-db`)**: MLflow metadata.
+- **MinIO**: model artifacts.
+- **Airflow + PostgreSQL (`airflow-db`)**: orchestration, bootstrap, demo jobs.
+- **Application PostgreSQL (`app-db`)**: demo data and prediction results.
+- **MLflow Autoserve**: reconciles aliases to serving containers.
+- **MLflow Serve containers**: one online inference endpoint per `model@alias`.
+- **Prometheus + Blackbox exporter**: service and endpoint health.
+- **Grafana**: dashboards and trace/log navigation.
+- **Loki + Promtail**: container logs.
 
-## 2) Data flow (end-to-end)
-1. **Data load** → Airflow DAG `dag_data_predictions` stores data in **app-db**.
-2. **Training** → DAG `dag_training` runs `ml.training.train_candidate()`, logs runs to **MLflow**, artifacts go to **MinIO**.
-3. **Registry & alias** → training auto-assigns alias `Production` to the best version (can be adjusted in MLflow UI).
-4. **Serving** → `mlflow-autoserve` detects aliases and starts `mlflow models serve` containers.
-5. **Inference (batch)** → DAG `dag_inference` loads the latest dataset and writes predictions to **app-db**.
-6. **Model monitoring** → DAG `dag_model_monitoring` compares candidate vs production.
-7. **Observability** → Blackbox checks `/ping` for each `mlflow-serve-*` container; Grafana shows health status.
-8. **Logs** → Promtail ships Docker logs to Loki; Grafana shows logs by service/container.
+## 2) Core Innovation
 
-## 3) Serving flow (MLflow Serve)
-- Each alias spawns a dedicated container named like `mlflow-serve-<model>-<alias>`.
-- Health endpoint: `GET /ping` (inside Docker network).
-- Inference endpoint: `POST /invocations` with MLflow scoring format.
-- Expected input schema is stored in MLflow artifacts: `data_contract/input_schema.json` and `sample_input.csv`.
-- MLflow Serve does **not** expose Prometheus `/metrics`; use Blackbox health probes for availability.
+Deployment is not a pipeline.
 
-## 4) Observability
-- **Service health**: `probe_success` from Blackbox.
-- **Dashboards**: provisioned from `monitoring/grafana/dashboards-min`.
-	- **Service Health Detailed** (all services + model/alias status)
-	- **MLflow Serving** (model alias health and probe latency)
-- **Logs**: Loki via Promtail; filter by `container` or `service` labels.
+Deployment is a label.
 
-## 5) Databases and network
-By default the stack uses **separate Postgres instances** (`mlflow-db`, `airflow-db`, `app-db`).
-This keeps isolation and avoids accidental cross-service schema conflicts.
+The serving target is controlled by MLflow aliases such as `champion` and `challenger`. Changing an alias changes the deployed model version without rebuilding a custom API service.
 
-**Single Postgres is possible** (not enabled by default):
-- Use one Postgres and separate schemas/databases for MLflow, Airflow, and app data.
-- Configure `MLFLOW_POSTGRES_URI`, `AIRFLOW_DB_URI`, `APP_DB_URI` accordingly.
-- Docker Compose already uses a shared network, so services talk to each other over internal DNS.
+## 3) End-to-End Flow
+1. Airflow loads demo data.
+2. Airflow trains multiple candidates.
+3. The best model is logged to MLflow and registered.
+4. MLflow aliases point to the active model versions.
+5. Autoserve notices alias changes and recreates `mlflow-serve-*` containers.
+6. Prometheus and Grafana show health for both base services and alias endpoints.
+7. Bootstrap runs a prediction integration test, which also writes explicit MLflow traces.
 
-## 6) Endpoints
-All ports are configured via `.env` (`*_PORT`).
-- MLflow UI: http://localhost:${MLFLOW_PORT}
-- Airflow UI: http://localhost:${AIRFLOW_WEB_PORT}
-- MinIO Console: http://localhost:${MINIO_CONSOLE_PORT}
-- Grafana: http://localhost:${GRAFANA_PORT}
-- Prometheus: http://localhost:${PROMETHEUS_PORT}
-- Loki: http://localhost:${LOKI_PORT}
+## 4) Serving Flow
+- Each alias creates a container named like `mlflow-serve-<model>-<alias>`.
+- Health endpoint: `GET /ping`.
+- Inference endpoint: `POST /invocations`.
+- Autoserve resolves the source experiment from the model version run and passes `MLFLOW_EXPERIMENT_NAME` into the serve container.
+- For the current demo, prediction payloads are sourced from `data_contract/sample_input.csv` logged during training.
+
+## 5) Observability
+- **Health**: Blackbox probes `GET /ping` for alias endpoints and health endpoints for infrastructure services.
+- **Logs**: Promtail ships container logs to Loki.
+- **Traces**: the bootstrap prediction test writes explicit MLflow traces into experiment `iris-classification_iris`.
+
+Important detail:
+- MLflow Serve does not expose Prometheus `/metrics` by default.
+- `GET /metrics -> 404` on a serve container is expected in this project.
+
+## 6) Demo Runtime Conventions
+- Default aliases: `champion`, `challenger`.
+- Default serving projects: `models_champion`, `models_challenger`.
+- Default experiment: `iris-classification_iris`.
+- Public demo project name: `mlops-demo`.
+- Public demo network: `mlops-demo_default`.
+
+## 7) Demo Scenario For a Live Talk
+1. Train model.
+2. Assign alias.
+3. Watch auto-deploy.
+
+Why this works well on stage:
+- the registry UI shows the decision point,
+- the serve container changes are visible immediately,
+- the dashboards reflect the rollout without any manual redeploy,
+- rollback is just another alias move.
+
+## 8) Traditional vs This Approach
+
+| Step | Traditional | This project |
+|---|---|---|
+| Deployment | CI/CD | Alias switch |
+| Rollback | Manual | Instant |
+| Serving | Custom API | MLflow serve |
+| Release target | Environment | Registry alias |
+| Validation | Separate process | `challenger` alias |
+
+## 9) Main Endpoints
+- MLflow UI: `http://localhost:15000`
+- Airflow UI: `http://localhost:18885`
+- MinIO Console: `http://localhost:19023`
+- Grafana: `http://localhost:13000`
+- Prometheus: `http://localhost:19090`
+- Loki: `http://localhost:13100`
+
+## 10) How To Verify The Demo Quickly
+1. `docker compose ps`
+2. Open Airflow and check `dag_data_predictions` and `dag_training`
+3. Open MLflow and inspect aliases for `iris_classifier_iris`
+4. Open the `Traces` tab for `iris-classification_iris`
+5. Open Grafana dashboard `Service Health Detailed`
+6. Run `RUN_INTEGRATION_TESTS=1 pytest -q test/test_integration_predictions.py` if you want to replay the prediction test manually

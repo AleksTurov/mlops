@@ -1,4 +1,4 @@
-"""mlops-toolkit helpers for MLflow and production testing."""
+"""mlops-toolkit helpers for MLflow and champion/challenger testing."""
 
 from .client import (
     get_client,

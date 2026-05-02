@@ -12,7 +12,7 @@
       "gridPos": {"x": 0, "y": 0, "w": 24, "h": 2},
       "options": {
         "mode": "markdown",
-        "content": "Use **Model** and **Alias** filters to focus on Production vs Test.\nThis dashboard shows health and probe latency for each model@alias."
+        "content": "Use **Model** and **Alias** filters to focus on Champion vs Challenger.\nThis dashboard shows health and probe latency for each model@alias."
       }
     },
     {
@@ -120,7 +120,7 @@
       "gridPos": {"x": 0, "y": 22, "w": 24, "h": 5},
       "options": {
         "mode": "markdown",
-        "content": "**Endpoints**\n- Health: `GET /ping`\n- Inference: `POST /invocations`\n\n**Find container**\n- `docker ps --format '{{.Names}}' | grep mlflow-serve-`\n\n**Input schema**\n- MLflow UI → Artifacts → `data_contract/input_schema.json`\n\n**Test alias**\n- Use the dashboard filter **Alias** and select `Test`.\n\n**Note**\nMLflow Serve не публикует метрики количества запросов. Для RPS/ошибок нужен внешний gateway/инструментированный сервис."
+        "content": "**Endpoints**\n- Health: `GET /ping`\n- Inference: `POST /invocations`\n\n**Find container**\n- `docker ps --format '{{.Names}}' | grep mlflow-serve-`\n\n**Input schema**\n- MLflow UI → Artifacts → `data_contract/input_schema.json`\n\n**Challenger alias**\n- Use the dashboard filter **Alias** and select `Challenger`.\n\n**Note**\nMLflow Serve не публикует метрики количества запросов. Для RPS/ошибок нужен внешний gateway/инструментированный сервис."
       }
     }
   ],

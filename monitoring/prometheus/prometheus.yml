@@ -5,7 +5,7 @@ global:
 scrape_configs:
   - job_name: "prometheus"
     static_configs:
-      - targets: ["127.0.0.1:9091"]
+      - targets: ["127.0.0.1:9090"]
 
   - job_name: "mlflow-serve"
     metrics_path: /metrics
@@ -17,7 +17,7 @@ scrape_configs:
         regex: true
         action: keep
       - source_labels: [__meta_docker_network_name]
-        regex: mlops_default
+        regex: __MLFLOW_SERVE_NETWORK__
         action: keep
       - source_labels: [__meta_docker_network_ip]
         regex: .+
@@ -38,31 +38,34 @@ scrape_configs:
     params:
       module: [http_2xx]
     static_configs:
-      - targets: [http://127.0.0.1:5000/health]
+      - targets: [http://mlflow:5000/health]
         labels:
           service: mlflow
-      - targets: [http://127.0.0.1:8885/health]
+      - targets: [http://airflow-webserver:8080/health]
         labels:
           service: airflow
-      - targets: [http://127.0.0.1:9022/minio/health/live]
+      - targets: [http://minio:9000/minio/health/live]
         labels:
           service: minio
-      - targets: [http://127.0.0.1:9091/-/healthy]
+      - targets: [http://prometheus:9090/-/healthy]
         labels:
           service: prometheus
-      - targets: [http://127.0.0.1:3100/ready]
+      - targets: [http://loki:3100/ready]
         labels:
           service: loki
-      - targets: [http://127.0.0.1:3001/api/health]
+      - targets: [http://grafana:3000/api/health]
         labels:
           service: grafana
+      - targets: [http://mlflow-autoserve:5010/health]
+        labels:
+          service: autoserve
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
       - source_labels: [__param_target]
         target_label: instance
       - target_label: __address__
-        replacement: 127.0.0.1:9115
+        replacement: blackbox-exporter:9115
 
   - job_name: "blackbox-mlflow-serve"
     metrics_path: /probe
@@ -76,7 +79,7 @@ scrape_configs:
         regex: true
         action: keep
       - source_labels: [__meta_docker_network_name]
-        regex: mlops_default
+        regex: __MLFLOW_SERVE_NETWORK__
         action: keep
       - source_labels: [__meta_docker_network_ip]
         regex: .+
@@ -93,4 +96,20 @@ scrape_configs:
       - source_labels: [__meta_docker_container_label_mlflow_alias]
         target_label: alias
       - target_label: __address__
-        replacement: 127.0.0.1:9115
+        replacement: blackbox-exporter:9115
+
+  - job_name: "blackbox-tcp"
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    static_configs:
+      - targets: [mlflow-db:5432]
+        labels:
+          service: mlflow-db
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

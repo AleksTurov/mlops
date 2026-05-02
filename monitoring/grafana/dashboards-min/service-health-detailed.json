@@ -3,13 +3,13 @@
   "uid": "service-health-detailed",
   "timezone": "browser",
   "schemaVersion": 38,
-  "version": 1,
+  "version": 4,
   "refresh": "30s",
   "panels": [
     {
       "type": "stat",
       "title": "MLflow",
-      "gridPos": {"x": 0, "y": 0, "w": 4, "h": 4},
+      "gridPos": {"x": 0, "y": 0, "w": 3, "h": 4},
       "datasource": "Prometheus",
       "targets": [
         {"expr": "probe_success{job=\"blackbox-http\", service=\"mlflow\"}", "refId": "A"}
@@ -28,7 +28,7 @@
     {
       "type": "stat",
       "title": "Airflow",
-      "gridPos": {"x": 4, "y": 0, "w": 4, "h": 4},
+      "gridPos": {"x": 3, "y": 0, "w": 3, "h": 4},
       "datasource": "Prometheus",
       "targets": [
         {"expr": "probe_success{job=\"blackbox-http\", service=\"airflow\"}", "refId": "A"}
@@ -47,7 +47,7 @@
     {
       "type": "stat",
       "title": "MinIO",
-      "gridPos": {"x": 8, "y": 0, "w": 4, "h": 4},
+      "gridPos": {"x": 6, "y": 0, "w": 3, "h": 4},
       "datasource": "Prometheus",
       "targets": [
         {"expr": "probe_success{job=\"blackbox-http\", service=\"minio\"}", "refId": "A"}
@@ -66,7 +66,7 @@
     {
       "type": "stat",
       "title": "Prometheus",
-      "gridPos": {"x": 12, "y": 0, "w": 4, "h": 4},
+      "gridPos": {"x": 9, "y": 0, "w": 3, "h": 4},
       "datasource": "Prometheus",
       "targets": [
         {"expr": "probe_success{job=\"blackbox-http\", service=\"prometheus\"}", "refId": "A"}
@@ -85,7 +85,7 @@
     {
       "type": "stat",
       "title": "Loki",
-      "gridPos": {"x": 16, "y": 0, "w": 4, "h": 4},
+      "gridPos": {"x": 12, "y": 0, "w": 3, "h": 4},
       "datasource": "Prometheus",
       "targets": [
         {"expr": "probe_success{job=\"blackbox-http\", service=\"loki\"}", "refId": "A"}
@@ -104,10 +104,29 @@
     {
       "type": "stat",
       "title": "Grafana",
-      "gridPos": {"x": 20, "y": 0, "w": 4, "h": 4},
+      "gridPos": {"x": 15, "y": 0, "w": 3, "h": 4},
       "datasource": "Prometheus",
       "targets": [
         {"expr": "probe_success{job=\"blackbox-http\", service=\"grafana\"}", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        },
+        "overrides": []
+      },
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}, "orientation": "horizontal", "textMode": "value", "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "type": "stat",
+      "title": "Vault",
+      "gridPos": {"x": 18, "y": 0, "w": 3, "h": 4},
+      "datasource": "Prometheus",
+      "targets": [
+        {"expr": "probe_success{job=\"blackbox-http\", service=\"vault\"}", "refId": "A"}
       ],
       "fieldConfig": {
         "defaults": {
@@ -126,7 +145,7 @@
       "gridPos": {"x": 0, "y": 4, "w": 24, "h": 2},
       "options": {
         "mode": "markdown",
-        "content": "**Core services** are shown above.\n\nUse the **Model** and **Alias** filters to focus on Production vs Test.\n**MLflow Serve** panels below show health by model@alias and per-instance /ping checks."
+        "content": "**Core services** are shown above.\n\nUse the **Model** and **Alias** filters to focus on Champion vs Challenger.\n**MLflow Serve** panels below show health by model@alias and per-instance /ping checks."
       }
     },
     {
@@ -256,6 +275,44 @@
         }
       ],
       "options": {"showHeader": true}
+    },
+    {
+      "type": "stat",
+      "title": "MLflow Autoserve",
+      "gridPos": {"x": 0, "y": 22, "w": 12, "h": 4},
+      "datasource": "Prometheus",
+      "targets": [
+        {"expr": "probe_success{job=\"blackbox-http\", service=\"autoserve\"}", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        },
+        "overrides": []
+      },
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}, "orientation": "horizontal", "textMode": "value", "colorMode": "value", "graphMode": "none"}
+    },
+    {
+      "type": "stat",
+      "title": "MLflow DB (Postgres)",
+      "gridPos": {"x": 12, "y": 22, "w": 12, "h": 4},
+      "datasource": "Prometheus",
+      "targets": [
+        {"expr": "probe_success{job=\"blackbox-tcp\", service=\"mlflow-db\"}", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        },
+        "overrides": []
+      },
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}, "orientation": "horizontal", "textMode": "value", "colorMode": "value", "graphMode": "none"}
     }
   ],
   "annotations": {"list": []},

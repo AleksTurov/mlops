@@ -4,15 +4,15 @@ import requests
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Send prediction request to a model server")
-    parser.add_argument("--url", required=True, help="base URL (e.g., http://localhost:8003)")
-    parser.add_argument("--payload", required=True, help="JSON file with input payload")
+    parser = argparse.ArgumentParser(description="Send a scoring request to an MLflow serving endpoint")
+    parser.add_argument("--url", required=True, help="base URL (e.g., http://localhost:8080)")
+    parser.add_argument("--payload", required=True, help="JSON file with MLflow scoring payload")
     args = parser.parse_args()
 
     with open(args.payload, "r", encoding="utf-8") as f:
         payload = json.load(f)
 
-    r = requests.post(f"{args.url.rstrip('/')}/predict", json=payload, timeout=30)
+    r = requests.post(f"{args.url.rstrip('/')}/invocations", json=payload, timeout=30)
     r.raise_for_status()
     print(json.dumps(r.json(), ensure_ascii=False, indent=2))
 

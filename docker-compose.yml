@@ -1,61 +1,196 @@
+name: ${COMPOSE_PROJECT_NAME:-mlops-demo}
+
 services:
   mlflow-db:
     image: postgres:15
-    container_name: mlflow-db
     restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER_MLFLOW}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_MLFLOW}
-      POSTGRES_DB: ${POSTGRES_DB_MLFLOW}
+      POSTGRES_USER: ${POSTGRES_USER:-mlflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlflow_demo_password}
+      POSTGRES_DB: ${POSTGRES_DB:-mlflow}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mlflow} -d ${POSTGRES_DB:-mlflow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     ports:
-      - "127.0.0.1:${POSTGRES_PORT_MLFLOW}:5432"
+      - "${POSTGRES_PORT:-16432}:5432"
     volumes:
-      - ${MLFLOW_DB_DATA}:/var/lib/postgresql/data
+      - mlops_mlflow_db_data:/var/lib/postgresql/data
+
+  airflow-db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: ${AIRFLOW_DB_USER:-airflow}
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD:-airflow}
+      POSTGRES_DB: ${AIRFLOW_DB_NAME:-airflow}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AIRFLOW_DB_USER:-airflow} -d ${AIRFLOW_DB_NAME:-airflow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "${AIRFLOW_DB_PORT:-16434}:5432"
+    volumes:
+      - mlops_airflow_db_data:/var/lib/postgresql/data
+
   app-db:
     image: postgres:15
     restart: always
     environment:
-      POSTGRES_USER: ${APP_DB_USER}
-      POSTGRES_PASSWORD: ${APP_DB_PASSWORD}
-      POSTGRES_DB: ${APP_DB_NAME}
+      POSTGRES_USER: ${APP_DB_USER:-app_user}
+      POSTGRES_PASSWORD: ${APP_DB_PASSWORD:-app_password}
+      POSTGRES_DB: ${APP_DB_NAME:-app_db}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${APP_DB_USER:-app_user} -d ${APP_DB_NAME:-app_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     ports:
-      - "127.0.0.1:${APP_DB_PORT}:5432"
+      - "${APP_DB_PORT:-16433}:5432"
     volumes:
-      - ${APP_DB_DATA}:/var/lib/postgresql/data
+      - mlops_app_db_data:/var/lib/postgresql/data
 
   minio:
     image: minio/minio:latest
-    container_name: mlflow_minio
     restart: always
     command: server /data --address ":9000" --console-address ":9023"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      MINIO_PORT: ${MINIO_PORT}
-      MINIO_CONSOLE_PORT: ${MINIO_CONSOLE_PORT}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
     ports:
-      - "127.0.0.1:${MINIO_PORT}:9000"
-      - "127.0.0.1:${MINIO_CONSOLE_PORT}:9023"
+      - "${MINIO_PORT:-19000}:9000"
+      - "${MINIO_CONSOLE_PORT:-19023}:9023"
     volumes:
-      - ${MINIO_DATA}:/data
+      - mlops_minio_data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    restart: "no"
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 3;
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin123};
+      mc mb --ignore-existing local/${S3_ARTIFACT_BUCKET:-mlflow};
+      mc anonymous set download local/${S3_ARTIFACT_BUCKET:-mlflow};
+      "
 
   mlflow:
-    build: .
-    container_name: mlflow_server
+    build:
+      context: .
     restart: always
     depends_on:
-      - mlflow-db
-      - minio
+      mlflow-db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
     environment:
-      POSTGRES_URI: postgresql://${POSTGRES_USER_MLFLOW}:${POSTGRES_PASSWORD_MLFLOW}@mlflow-db:5432/${POSTGRES_DB_MLFLOW}
-      ARTIFACT_ROOT: s3://${MINIO_BUCKET}/
-      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
-      AWS_DEFAULT_REGION: us-east-1 # MinIO требует указания региона, даже если он не используется
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
-      MLFLOW_PORT: ${MLFLOW_PORT}
+      POSTGRES_URI: ${MLFLOW_POSTGRES_URI:-postgresql://mlflow:mlflow_demo_password@mlflow-db:5432/mlflow}
+      ARTIFACT_ROOT: ${ARTIFACT_ROOT:-s3://mlflow/}
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL:-http://minio:9000}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin123}
+      MLFLOW_SERVER_ALLOWED_HOSTS: ${MLFLOW_SERVER_ALLOWED_HOSTS:-*}
     ports:
-      - "127.0.0.1:${MLFLOW_PORT}:5000"
+      - "${MLFLOW_PORT:-15000}:5000"
+
+  airflow-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    restart: "no"
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      app-db:
+        condition: service_healthy
+    environment:
+      PYTHONWARNINGS: "ignore::SyntaxWarning,ignore::DeprecationWarning,ignore::UserWarning"
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_DB_URI:-postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow}
+      AIRFLOW__LOGGING__LOGGING_CONFIG_CLASS: airflow.config_templates.airflow_local_settings.DEFAULT_LOGGING_CONFIG
+      AIRFLOW__LOGGING__TASK_LOG_READER: task
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-demo-airflow-web-secret-2026}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-cHVibGljLWRlbW8tZmVybmV0LWtleS0yMDI2LTAwMDE=}
+      PYTHONPATH: /opt/airflow:/opt/airflow/src
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL:-http://minio:9000}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin123}
+      S3_ARTIFACT_BUCKET: ${S3_ARTIFACT_BUCKET:-mlflow}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+    entrypoint: /bin/sh
+    command: -c "airflow db migrate && airflow connections create-default-connections && airflow users create --role Admin --username ${AIRFLOW_ADMIN_USER:-admin} --password ${AIRFLOW_ADMIN_PASSWORD:-admin} --firstname Admin --lastname User --email admin@example.com || true"
+
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      PYTHONWARNINGS: "ignore::SyntaxWarning,ignore::DeprecationWarning,ignore::UserWarning"
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_DB_URI:-postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow}
+      AIRFLOW__LOGGING__LOGGING_CONFIG_CLASS: airflow.config_templates.airflow_local_settings.DEFAULT_LOGGING_CONFIG
+      AIRFLOW__LOGGING__TASK_LOG_READER: task
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-demo-airflow-web-secret-2026}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-cHVibGljLWRlbW8tZmVybmV0LWtleS0yMDI2LTAwMDE=}
+      PYTHONPATH: /opt/airflow:/opt/airflow/src
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL:-http://minio:9000}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin123}
+      S3_ARTIFACT_BUCKET: ${S3_ARTIFACT_BUCKET:-mlflow}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./scripts:/opt/airflow/scripts
+    ports:
+      - "${AIRFLOW_WEB_PORT:-18885}:8080"
+    command: webserver
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      PYTHONWARNINGS: "ignore::SyntaxWarning,ignore::DeprecationWarning,ignore::UserWarning"
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_DB_URI:-postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-demo-airflow-web-secret-2026}
+      AIRFLOW__LOGGING__LOGGING_CONFIG_CLASS: airflow.config_templates.airflow_local_settings.DEFAULT_LOGGING_CONFIG
+      AIRFLOW__LOGGING__TASK_LOG_READER: task
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-cHVibGljLWRlbW8tZmVybmV0LWtleS0yMDI2LTAwMDE=}
+      PYTHONPATH: /opt/airflow:/opt/airflow/src
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL:-http://minio:9000}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin123}
+      S3_ARTIFACT_BUCKET: ${S3_ARTIFACT_BUCKET:-mlflow}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+    command: scheduler
 
   model-server:
     build:
@@ -69,45 +204,93 @@ services:
     environment:
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
       MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL:-http://minio:9000}
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
-      MODEL_ALIAS: Production
-      MODEL_ROLE: production
-      MODEL_SERVER_POLL_SECONDS: 120
-      MODEL_NAME: ${MODEL_NAME:-"my_model"}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin123}
+      MODEL_ALIAS: ${MODEL_ALIAS:-champion}
+      MODEL_ROLE: ${MODEL_ROLE:-production}
+      MODEL_SERVER_POLL_SECONDS: ${MODEL_SERVER_POLL_SECONDS:-30}
+      MODEL_NAME: ${MODEL_NAME:-iris_classifier_iris}
     ports:
-      - "127.0.0.1:${MODEL_SERVER_PORT:-8003}:8000"
+      - "${MODEL_SERVER_PORT:-18000}:8000"
+
+  demo-bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    restart: "no"
+    depends_on:
+      airflow-webserver:
+        condition: service_started
+      airflow-scheduler:
+        condition: service_started
+      mlflow:
+        condition: service_started
+      mlflow-autoserve:
+        condition: service_started
+    environment:
+      PYTHONWARNINGS: "ignore::SyntaxWarning,ignore::DeprecationWarning,ignore::UserWarning"
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW_DB_URI:-postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow}
+      AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-cHVibGljLWRlbW8tZmVybmV0LWtleS0yMDI2LTAwMDE=}
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-demo-airflow-web-secret-2026}
+      AIRFLOW__LOGGING__LOGGING_CONFIG_CLASS: airflow.config_templates.airflow_local_settings.DEFAULT_LOGGING_CONFIG
+      AIRFLOW__LOGGING__TASK_LOG_READER: task
+      PYTHONPATH: /opt/airflow:/opt/airflow/src
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
+      MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL:-http://minio:9000}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin123}
+      S3_ARTIFACT_BUCKET: ${S3_ARTIFACT_BUCKET:-mlflow}
+      MLFLOW_PORT: ${MLFLOW_PORT:-15000}
+      AIRFLOW_WEB_PORT: ${AIRFLOW_WEB_PORT:-18885}
+      GRAFANA_PORT: ${GRAFANA_PORT:-13000}
+      PROMETHEUS_PORT: ${PROMETHEUS_PORT:-19090}
+      MINIO_CONSOLE_PORT: ${MINIO_CONSOLE_PORT:-19023}
+      MLFLOW_MODEL_ALIAS: ${MLFLOW_MODEL_ALIAS:-champion}
+      BOOTSTRAP_RESET_MLFLOW: ${BOOTSTRAP_RESET_MLFLOW:-false}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags:ro
+      - ./src:/opt/airflow/src:ro
+      - ./scripts:/opt/airflow/scripts:ro
+      - ./test:/opt/airflow/test:ro
+    entrypoint: /bin/sh
+    command: -c "sh /opt/airflow/scripts/bootstrap_demo.sh"
 
   prometheus:
     image: prom/prometheus:v2.53.2
     restart: always
     user: "0"
-    network_mode: "host"
+    entrypoint: ["/bin/sh", "-c"]
+    environment:
+      COMPOSE_DEFAULT_NETWORK: ${COMPOSE_DEFAULT_NETWORK:-mlops-demo_default}
     command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --web.listen-address=:${PROMETHEUS_PORT}
+      - sed "s/__MLFLOW_SERVE_NETWORK__/$${COMPOSE_DEFAULT_NETWORK}/g" /etc/prometheus/prometheus.yml > /tmp/prometheus.yml && /bin/prometheus --config.file=/tmp/prometheus.yml --web.listen-address=:9090
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "${PROMETHEUS_PORT:-19090}:9090"
 
   blackbox-exporter:
     image: prom/blackbox-exporter:v0.26.0
     restart: always
-    network_mode: "host"
     volumes:
       - ./monitoring/blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
     command: --config.file=/etc/blackbox_exporter/config.yml
-
+    ports:
+      - "${BLACKBOX_PORT:-19115}:9115"
 
   loki:
     image: grafana/loki:3.0.0
     restart: always
+    user: "0"
     command: -config.file=/etc/loki/config.yml -validation.allow-structured-metadata=false
     volumes:
       - ./monitoring/loki/loki-config.yml:/etc/loki/config.yml:ro
       - mlops_loki_data:/loki
     ports:
-      - "127.0.0.1:${LOKI_PORT}:3100"
+      - "${LOKI_PORT:-13100}:3100"
 
   promtail:
     image: grafana/promtail:3.0.0
@@ -120,30 +303,22 @@ services:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
     depends_on:
       - loki
-    ports:
-      - "127.0.0.1:${PROMTAIL_PORT:-9080}:9080"
 
   grafana:
     image: grafana/grafana:11.4.0
     restart: always
-    network_mode: "host"
     environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
-      GF_SERVER_HTTP_PORT: ${GRAFANA_PORT}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_LOG_LEVEL: warn
       GF_SERVER_ROUTER_LOGGING: "false"
       GF_PLUGINS_DISABLE_PLUGINS: xychart
-      PROMETHEUS_PORT: ${PROMETHEUS_PORT}
-      LOKI_PORT: ${LOKI_PORT}
-      APP_DB_PORT: ${APP_DB_PORT}
-      APP_DB_NAME: ${APP_DB_NAME}
-      APP_DB_USER: ${APP_DB_USER}
-      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
     volumes:
       - mlops_grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
       - ./monitoring/grafana/dashboards-min:/etc/grafana/dashboards-min
+    ports:
+      - "${GRAFANA_PORT:-13000}:3000"
     depends_on:
       - prometheus
 
@@ -151,7 +326,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.model
-    image: mlops-mlflow-autoserve
+    image: ${MLFLOW_AUTOSERVE_IMAGE:-mlops-demo-mlflow-autoserve}
     restart: always
     depends_on:
       - mlflow
@@ -159,21 +334,39 @@ services:
     environment:
       MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
       MLFLOW_S3_ENDPOINT_URL: ${MLFLOW_S3_ENDPOINT_URL:-http://minio:9000}
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
-      MLFLOW_SERVE_ALIASES: ${MLFLOW_SERVE_ALIASES:-Production,Test}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin123}
+      MLFLOW_SERVE_ALIASES: ${MLFLOW_SERVE_ALIASES:-champion,challenger}
+      MLFLOW_SERVE_ALIAS_PROJECTS: ${MLFLOW_SERVE_ALIAS_PROJECTS:-champion=models_champion,challenger=models_challenger}
+      MLFLOW_SERVE_PROJECT_CHAMPION: ${MLFLOW_SERVE_PROJECT_CHAMPION:-models_champion}
+      MLFLOW_SERVE_PROJECT_CHALLENGER: ${MLFLOW_SERVE_PROJECT_CHALLENGER:-models_challenger}
+      MLFLOW_SERVE_MODE: docker-image
+      MLFLOW_SERVE_ENV_MANAGER: local
+      MLFLOW_SERVE_BUILD_RETRIES: ${MLFLOW_SERVE_BUILD_RETRIES:-5}
+      MLFLOW_SERVE_BUILD_RETRY_DELAY_SECONDS: ${MLFLOW_SERVE_BUILD_RETRY_DELAY_SECONDS:-20}
+      MLFLOW_SERVE_BUILD_BASE_IMAGE: ${MLFLOW_SERVE_BUILD_BASE_IMAGE:-mlops-demo-mlflow-autoserve}
+      MLFLOW_SERVE_ENABLE_GPU: ${MLFLOW_SERVE_ENABLE_GPU:-false}
+      MLFLOW_MODELS_WORKERS: ${MLFLOW_MODELS_WORKERS:-1}
       MLFLOW_SERVE_PORT: 5000
-      MLFLOW_SERVE_IMAGE: mlops-mlflow
-      MLFLOW_SERVE_NETWORK: mlops_default
+      MLFLOW_SERVE_IMAGE: ${MLFLOW_SERVE_IMAGE:-mlops-demo-mlflow}
+      MLFLOW_SERVE_NETWORK: ${COMPOSE_DEFAULT_NETWORK:-mlops-demo_default}
       MLFLOW_SERVE_POLL_SECONDS: ${MLFLOW_SERVE_POLL_SECONDS:-30}
+      MLFLOW_TRACES_EXPERIMENT_NAME: ${MLFLOW_TRACES_EXPERIMENT_NAME:-}
       PYTHONPATH: /app/src
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "${MLFLOW_AUTOSERVE_PORT:-15010}:5010"
     command: python -m app.mlflow_autoserve
 
 volumes:
+  mlops_airflow_db_data:
   mlops_app_db_data:
   mlops_mlflow_db_data:
   mlops_minio_data:
   mlops_grafana_data:
   mlops_loki_data:
+
+networks:
+  default:
+    name: ${COMPOSE_DEFAULT_NETWORK:-mlops-demo_default}

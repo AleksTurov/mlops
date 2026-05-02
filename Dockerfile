@@ -1,10 +1,5 @@
 FROM python:3.12-slim
 
-# Install system dependencies for psycopg2 and S3 support
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libpq-dev curl && \
-    rm -rf /var/lib/apt/lists/*
-
 # Set working directory
 WORKDIR /app
 

@@ -2,14 +2,19 @@
 
 ### scripts/predict_request.py
 - **Why**: send a request to a model endpoint and validate response.
-- **What**: reads JSON payload and calls `/predict`.
+- **What**: reads MLflow scoring payload and calls `/invocations`.
 - **When**: smoke test and demo (if a model endpoint is exposed).
+
+### scripts/print_model_input_schema.py
+- **Why**: inspect what a registered MLflow model version expects on input.
+- **What**: resolves a model alias and prints any available schema metadata from `data_contract/input_schema.json`, `model/MLmodel`, `model/serving_input_example.json`, and `model/input_example.json`.
+- **When**: before building a scoring payload or when validating a newly promoted champion/challenger model.
 
 ## Airflow DAGs (scheduled scripts)
 
 ### airflow/dags/dag_data_predictions.py
 - **Why**: prepare data for training/inference.
-- **What**: loads a sklearn dataset (iris) into app-db.
+- **What**: loads a sklearn dataset (iris) into the external application DB.
 
 ### airflow/dags/dag_training.py
 - **Why**: regular model training and registration.

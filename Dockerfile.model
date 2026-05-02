@@ -1,21 +1,16 @@
-FROM python:3.12-slim
+FROM docker:26.1.4-cli AS docker-cli
 
-ENV DOCKER_CLI_VERSION=26.1.4
+FROM python:3.10-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-	ca-certificates curl \
-	&& rm -rf /var/lib/apt/lists/* \
-	&& curl -fsSL "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_CLI_VERSION}.tgz" -o /tmp/docker.tgz \
-	&& tar -xzf /tmp/docker.tgz -C /tmp \
-	&& mv /tmp/docker/docker /usr/local/bin/docker \
-	&& rm -rf /tmp/docker /tmp/docker.tgz
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+	&& pip install --no-cache-dir tqdm==4.67.1
 
 COPY src /app/src
 ENV PYTHONPATH=/app/src
 
-CMD ["uvicorn", "app.model_server:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "app.mlflow_autoserve"]
