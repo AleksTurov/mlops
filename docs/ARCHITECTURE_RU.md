@@ -1,4 +1,6 @@
-# Архитектура и ценность решения (RU)
+# Архитектура и операционная модель (RU)
+
+Этот документ объясняет, как устроен стек, почему alias-driven deployment меняет модель эксплуатации, и за счет чего demo выглядит убедительно как для инженерной аудитории, так и для стейкхолдеров. Для команд запуска и проверки используйте [docs/DEMO.md](docs/DEMO.md).
 
 ## 1) Главная идея
 
@@ -14,7 +16,7 @@
 - не держать отдельный кастомный deployment orchestrator,
 - использовать MLflow Registry как источник истины для serving.
 
-Именно это и есть core innovation проекта.
+Именно в этом и состоит core innovation проекта: promotion и rollback становятся операциями над metadata, а не отдельным инфраструктурным сценарием.
 
 ## 2) Что здесь происходит
 
@@ -36,17 +38,17 @@ flowchart LR
     E --> F[Grafana and MLflow Traces]
 ```
 
-## 3) Почему это продает архитектуру
+## 3) Почему эта модель работает
 
 Главная сильная сторона не в количестве сервисов, а в том, что deployment становится дешевой, быстрой и обратимой операцией.
 
-### Плюсы такой архитектуры
+### Практические преимущества
 - **Быстрый rollout**: новая версия появляется через alias, а не через отдельный deployment pipeline.
 - **Мгновенный rollback**: достаточно вернуть alias на предыдущую версию.
 - **Прозрачность**: registry, serving, health и traces видны в одном контуре.
 - **Минимум кастомного кода**: serving построен на стандартном MLflow Serve.
-- **Дешевый локальный demo**: весь стек запускается одной командой.
-- **Хороший storytelling для сцены**: train → alias → auto-deploy видно сразу.
+- **Один воспроизводимый контур**: тот же стек подходит для demo, разработки и диагностики.
+- **Понятная демонстрация на сцене**: train → alias → auto-deploy видно сразу и без дополнительных пояснений.
 
 ## 4) Traditional vs This Approach
 
@@ -87,9 +89,11 @@ flowchart LR
 - Loki хранит логи,
 - MLflow показывает traces demo-запросов.
 
-## 6) Что важно показать на сцене
+Наблюдаемость здесь намеренно расположена рядом с механизмом выкладки: после изменения alias тот же контур сразу показывает health, логи и trace evidence.
 
-Это killer demo-сценарий:
+## 6) Сценарий для live demo
+
+Сценарий предельно простой:
 
 1. **Step 1: train model**
 2. **Step 2: assign alias**
@@ -103,7 +107,7 @@ flowchart LR
 - Grafana показывает, что endpoint жив,
 - MLflow показывает traces demo-запросов.
 
-Это очень сильный narrative, потому что deployment виден как операция над metadata, а не как отдельный инфраструктурный ceremony.
+Этот сценарий работает убедительно, потому что deployment виден как операция над metadata, а не как отдельный инфраструктурный ceremony.
 
 ## 7) Как работает demo bootstrap
 
@@ -131,6 +135,7 @@ flowchart LR
 
 ### Grafana
 - UI: `http://localhost:13000`
+- открыть `MLOps Overview`
 - открыть `Service Health Detailed`
 - открыть `MLflow Serving`
 
@@ -149,7 +154,21 @@ flowchart LR
 
 Это делает demo предсказуемой: traces появляются всегда, без зависимости от скрытого поведения serve runtime.
 
-## 10) Почему это хороший public demo
+## 10) Как быстро перепроверить demo
+
+После `docker compose up -d --build` используйте:
+
+```bash
+./scripts/run_demo_checks.sh
+```
+
+Если нужен только повтор prediction/traces path:
+
+```bash
+RUN_INTEGRATION_TESTS=1 .venv/bin/python -m pytest -q test/test_integration_predictions.py
+```
+
+## 11) Почему это сильный public demo
 
 - Не нужен Vault.
 - Не нужен внешний deployment pipeline.

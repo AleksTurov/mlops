@@ -10,6 +10,11 @@
 - **What**: resolves a model alias and prints any available schema metadata from `data_contract/input_schema.json`, `model/MLmodel`, `model/serving_input_example.json`, and `model/input_example.json`.
 - **When**: before building a scoring payload or when validating a newly promoted champion/challenger model.
 
+### scripts/run_demo_checks.sh
+- **Why**: rerun the public demo verification with one command.
+- **What**: smoke-checks the main local service endpoints and then runs `pytest` with `RUN_INTEGRATION_TESTS=1` via the workspace `.venv` by default.
+- **When**: after `docker compose up -d --build`, before a demo, or after monitoring/serving changes.
+
 ## Airflow DAGs (scheduled scripts)
 
 ### airflow/dags/dag_data_predictions.py

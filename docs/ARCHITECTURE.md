@@ -1,4 +1,6 @@
-# Architecture and System Flow (EN)
+# Architecture and Operating Model (EN)
+
+This file explains how the stack is structured, why the alias-driven deployment model matters, and how the runtime behaves once the demo is up. For startup and verification commands, use [docs/DEMO.md](docs/DEMO.md).
 
 ## 1) Service Roles
 - **MLflow**: experiment tracking, model registry, aliases, traces.
@@ -20,6 +22,8 @@ Deployment is a label.
 
 The serving target is controlled by MLflow aliases such as `champion` and `challenger`. Changing an alias changes the deployed model version without rebuilding a custom API service.
 
+That changes the operating model in an important way: promotion and rollback move from infrastructure choreography to registry metadata.
+
 ## 3) End-to-End Flow
 1. Airflow loads demo data.
 2. Airflow trains multiple candidates.
@@ -28,6 +32,8 @@ The serving target is controlled by MLflow aliases such as `champion` and `chall
 5. Autoserve notices alias changes and recreates `mlflow-serve-*` containers.
 6. Prometheus and Grafana show health for both base services and alias endpoints.
 7. Bootstrap runs a prediction integration test, which also writes explicit MLflow traces.
+
+The result is a closed loop: train, register, promote, serve, and observe all happen inside one reproducible local stack.
 
 ## 4) Serving Flow
 - Each alias creates a container named like `mlflow-serve-<model>-<alias>`.
@@ -40,6 +46,9 @@ The serving target is controlled by MLflow aliases such as `champion` and `chall
 - **Health**: Blackbox probes `GET /ping` for alias endpoints and health endpoints for infrastructure services.
 - **Logs**: Promtail ships container logs to Loki.
 - **Traces**: the bootstrap prediction test writes explicit MLflow traces into experiment `iris-classification_iris`.
+- **Dashboards**: Grafana exposes `MLOps Overview`, `Service Health Detailed`, and `MLflow Serving` for the public demo.
+
+The observability layer is intentionally close to the deployment mechanism: when an alias changes, the same stack shows target health, logs, and trace evidence without requiring a separate platform.
 
 Important detail:
 - MLflow Serve does not expose Prometheus `/metrics` by default.
@@ -58,10 +67,10 @@ Important detail:
 3. Watch auto-deploy.
 
 Why this works well on stage:
-- the registry UI shows the decision point,
-- the serve container changes are visible immediately,
-- the dashboards reflect the rollout without any manual redeploy,
-- rollback is just another alias move.
+- the registry UI shows the decision point clearly,
+- the serving target changes immediately after the alias move,
+- the dashboards reflect the rollout without a separate release step,
+- rollback is the same operation in reverse.
 
 ## 8) Traditional vs This Approach
 
@@ -73,18 +82,4 @@ Why this works well on stage:
 | Release target | Environment | Registry alias |
 | Validation | Separate process | `challenger` alias |
 
-## 9) Main Endpoints
-- MLflow UI: `http://localhost:15000`
-- Airflow UI: `http://localhost:18885`
-- MinIO Console: `http://localhost:19023`
-- Grafana: `http://localhost:13000`
-- Prometheus: `http://localhost:19090`
-- Loki: `http://localhost:13100`
-
-## 10) How To Verify The Demo Quickly
-1. `docker compose ps`
-2. Open Airflow and check `dag_data_predictions` and `dag_training`
-3. Open MLflow and inspect aliases for `iris_classifier_iris`
-4. Open the `Traces` tab for `iris-classification_iris`
-5. Open Grafana dashboard `Service Health Detailed`
-6. Run `RUN_INTEGRATION_TESTS=1 pytest -q test/test_integration_predictions.py` if you want to replay the prediction test manually
+In other words, this architecture does not remove operational discipline. It compresses the path from model decision to serving decision so the rollout mechanism is simpler, faster, and easier to explain.

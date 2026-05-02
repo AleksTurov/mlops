@@ -2,7 +2,7 @@
 
 ![Architecture](docs/Mlops_01.png)
 
-This repository is a self-contained public demo of local MLOps on a budget.
+This repository is a self-contained public demo of an alias-driven MLOps stack built entirely from open-source components.
 
 It starts a full stack with one command:
 
@@ -28,6 +28,7 @@ By switching MLflow aliases, this stack can:
 - deploy a new model instantly
 - avoid downtime during rollout
 - roll back in seconds
+- keep serving decisions inside the model registry instead of an external release workflow
 
 ## Simple Flow
 
@@ -44,6 +45,12 @@ flowchart LR
 
 ```bash
 docker compose up -d --build
+```
+
+After the stack is up, run the one-command verification:
+
+```bash
+./scripts/run_demo_checks.sh
 ```
 
 Optional customization:
@@ -80,55 +87,36 @@ The public repo does not use Vault and runs under the isolated Compose project `
 - prediction integration test from bootstrap
 - explicit MLflow traces for the demo experiment
 
-## Demo Scenario
-
-This is the stage-friendly flow:
-
-1. Train model.
-2. Assign alias.
-3. Watch auto-deploy.
-
-In this repository the first two steps already happen during bootstrap, so the live part of the demo is the alias switch and the instant serving update.
-
-## Traditional vs This Approach
-
-| Step | Traditional | This project |
-|---|---|---|
-| Deployment | CI/CD pipeline | Alias switch |
-| Rollback | Manual redeploy | Instant alias move |
-| Serving | Custom API service | MLflow serve |
-| Release target | Environment-specific | Registry alias |
-| Validation | Separate release stage | `challenger` side-by-side |
-
-## How To See Demo Traces
-
-1. Open MLflow at `http://localhost:15000`.
-2. Open experiment `iris-classification_iris`.
-3. Open the `Traces` tab.
-4. You should see traces created by the bootstrap prediction test.
-5. If you want to replay them manually, run:
-
-```bash
-RUN_INTEGRATION_TESTS=1 pytest -q test/test_integration_predictions.py
-```
-
-That test:
-- resolves model versions by experiment name and alias
-- sends real `/invocations` requests to `champion` and `challenger`
-- writes explicit MLflow traces into the demo experiment
-
 ## Why This Architecture Works
 
-- It keeps deployment semantics inside the model registry.
-- It avoids a custom serving control plane.
-- It makes rollback a metadata operation instead of an infrastructure operation.
-- It gives one reproducible local stack for demos, development, and debugging.
-- It keeps observability close to the serving path.
+- It keeps deployment semantics inside the model registry, where model decisions already live.
+- It avoids a separate serving control plane for the common rollout path.
+- It turns rollback into a metadata change instead of an infrastructure event.
+- It gives one reproducible stack for demos, development, and debugging.
+- It keeps health, logs, and traces close to the serving path that operators actually care about.
+
+## After Startup
+
+Run the one-command verification:
+
+```bash
+./scripts/run_demo_checks.sh
+```
+
+Then use these entry points:
+- MLflow experiment `iris-classification_iris` for runs, models, and traces
+- Grafana dashboards `MLOps Overview`, `Service Health Detailed`, and `MLflow Serving`
+- Airflow DAGs `dag_data_predictions` and `dag_training`
+
+The project is organized so that each document has one job:
+- [docs/DEMO.md](docs/DEMO.md) is the runbook for live walkthroughs
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) explains the system design and operating model
+- [docs/ARCHITECTURE_RU.md](docs/ARCHITECTURE_RU.md) presents the same architecture in Russian for conference and stakeholder context
 
 ## Docs
 
-- Demo guide (EN): [docs/DEMO.md](docs/DEMO.md)
-- Architecture and flow (EN): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Demo runbook (EN): [docs/DEMO.md](docs/DEMO.md)
+- Architecture and system flow (EN): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Architecture and selling points (RU): [docs/ARCHITECTURE_RU.md](docs/ARCHITECTURE_RU.md)
 - Python toolkit docs: [README_library.md](README_library.md)
 
