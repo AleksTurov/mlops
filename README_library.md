@@ -1,6 +1,6 @@
 # mlops-toolkit
 
-Small helper library for data scientists to accelerate MLflow workflows and production testing.
+Small helper library for data scientists to accelerate MLflow workflows and champion/challenger validation.
 
 Features
 - MLflow helpers: alias management, artifact upload/download
@@ -14,7 +14,7 @@ Quick examples
 
 Set MLflow alias
 ```bash
-mlops-toolkit alias set --model-name my_model --version 12 --alias Production
+mlops-toolkit alias set --model-name my_model --version 12 --alias champion
 ```
 
 Upload artifact

@@ -5,3 +5,8 @@ modules:
     http:
       valid_status_codes: [200, 302, 401, 403]
       method: GET
+      tls_config:
+        insecure_skip_verify: true
+  tcp_connect:
+    prober: tcp
+    timeout: 5s

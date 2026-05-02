@@ -6,7 +6,19 @@ positions:
   filename: /positions/positions.yaml
 
 clients:
-  - url: http://loki:3100/loki/api/v1/push
+  - url: http://127.0.0.1:3100/loki/api/v1/push
+    batchwait: 3s
+    batchsize: 262144
+    timeout: 10s
+    backoff_config:
+      min_period: 500ms
+      max_period: 30s
+      max_retries: 20
+
+limits_config:
+  readline_rate_enabled: true
+  readline_rate: 2000
+  readline_burst: 4000
 
 scrape_configs:
   - job_name: docker
@@ -14,7 +26,6 @@ scrape_configs:
       - docker: {}
       - static_labels:
           job: docker
-          project: mlops
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
         refresh_interval: 5s
@@ -24,14 +35,13 @@ scrape_configs:
         target_label: job
         replacement: docker
         action: replace
-      - source_labels: [__meta_docker_container_name]
+      - source_labels: [__meta_docker_container_label_com_docker_compose_project]
+        regex: (mlops|models_champion|models_challenger)
+        action: keep
+      - source_labels: [__meta_docker_container_label_com_docker_compose_project]
         regex: .+
         target_label: project
-        replacement: mlops
         action: replace
-      - source_labels: [__meta_docker_container_label_com_docker_compose_project]
-        regex: mlops
-        action: keep
       - source_labels: [__meta_docker_container_label_com_docker_compose_service]
         target_label: service
       - source_labels: [__meta_docker_container_label_com_docker_compose_service]

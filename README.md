@@ -1,4 +1,4 @@
-# MLOps Reference Stack (MLflow + Airflow + Prometheus + Loki)
+# MLOps Platform (MLflow + Autoserve + Monitoring)
 
 Architecture (visual)
 
@@ -6,26 +6,23 @@ Architecture (visual)
 
 ![Service Health (Grafana)](docs/Mlops_02.png)
 
-This repository provides a minimal, script-first MLOps stack for data scientists (Phase 1):
-- you run experiments locally or in notebooks,
-- every training run is logged to MLflow (params/metrics/artifacts),
+This repository provides a practical MLOps runtime for model registry, model serving, and observability:
+- experiments and model versions are managed in MLflow,
 - artifacts are stored in MinIO,
-- MLflow models are served via standard `mlflow models serve` containers (auto-managed),
-- Prometheus/Grafana monitor all services.
+- model endpoints are auto-created from MLflow aliases,
+- health and logs are visible in Grafana (Prometheus + Loki).
 
-Key components
-- MLflow + PostgreSQL for tracking and model registry
-- MinIO for artifact storage (S3-compatible)
-- Airflow for batch and scheduled tasks only
-- MLflow autoserve watcher (spawns `mlflow models serve` per alias)
-- Prometheus + Grafana (metrics dashboards)
-- Loki + Promtail (log aggregation)
+Current components
+- MLflow + PostgreSQL (mlflow-db) for tracking and registry
+- MinIO for artifacts
+- External application PostgreSQL (configured from Vault) for app-side data
+- MLflow autoserve for alias-driven serving containers
+- Prometheus + Blackbox Exporter + Grafana for health monitoring
+- Loki + Promtail for centralized logs
 
 Docs
-- Demo guide (EN): [docs/DEMO.md](docs/DEMO.md)
-- Architecture and end-to-end flow (EN): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Architecture and flow (EN): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Architecture (RU): [docs/ARCHITECTURE_RU.md](docs/ARCHITECTURE_RU.md)
-- Scripts & DAGs (EN): [docs/SCRIPTS.md](docs/SCRIPTS.md)
 
 Local Python environment (optional)
 ```bash
@@ -36,29 +33,24 @@ pip install -r requirements.txt
 
 Quick start
 ```bash
-cp env.dev.example .env
-docker compose --env-file .env up -d --build
+set -a
+source /data/aturov/vault/scripts/export-env.sh kv/data/dev/mlops
+source /data/aturov/vault/scripts/export-env.sh kv/data/dev/grafana
+source /data/aturov/vault/scripts/export-env.sh kv/data/dev/minio
+source /data/aturov/vault/scripts/export-env.sh kv/data/dev/mlflow
+source /data/aturov/vault/scripts/export-env.sh kv/data/dev/airflow
+set +a
+docker compose up -d --build
 ```
 
-Auto-demo runs via the `demo-bootstrap` container and does:
-- health checks for core services,
-- unpause/trigger DAGs `dag_data_predictions` and `dag_training`.
+Development deploy via CI
+- Branch: dev
+- Jobs: build_dev -> deploy_dev
+- Secrets source: Vault paths kv/data/dev/mlops, kv/data/dev/grafana, kv/data/dev/minio, kv/data/dev/mlflow
+- Compose project name: mlops
 
-If you need to reset MLflow experiments on start, add to .env:
-```
-BOOTSTRAP_RESET_MLFLOW=true
-```
-
-Demo flow (auto on first start)
-1) `demo-bootstrap` triggers `dag_data_predictions` (loads dataset into app-db).
-2) `demo-bootstrap` triggers `dag_training` (trains models, logs metrics in MLflow).
-3) Training automatically assigns alias `Production` to the best version.
-4) `mlflow-autoserve` starts `mlflow models serve` for all aliases.
-5) Prometheus/Grafana start collecting health signals immediately.
-
-Main endpoints (ports are defined in .env)
+Main endpoints (ports are defined via Vault environment variables)
 - MLflow UI: http://localhost:${MLFLOW_PORT}
-- Airflow UI: http://localhost:${AIRFLOW_WEB_PORT}
 - MinIO Console: http://localhost:${MINIO_CONSOLE_PORT}
 - Grafana: http://localhost:${GRAFANA_PORT}
 - Prometheus: http://localhost:${PROMETHEUS_PORT}
@@ -69,33 +61,45 @@ Dashboards
 - Use dashboard "Service Health Detailed" to verify each service is alive.
 - Use dashboard "MLflow Serving" to inspect model serving status and /ping health.
 
-Workflow (data scientist view)
-1) Build features in notebooks, Airflow, or service.
-2) Train locally and log to MLflow (params/metrics/artifacts).
-3) Assign alias (for example, `Production`) to the candidate model.
-4) `mlflow-autoserve` auto-starts `mlflow models serve` for each alias.
-5) When ready, promote by switching MLflow alias to a new version.
+Platform workflow
+1) Register or update model versions in MLflow.
+2) Assign aliases in registry (champion, challenger).
+3) Autoserve detects aliases and runs/updates serving containers.
+4) Blackbox probes /ping, dashboards show model@alias health.
+5) Promote or rollback by moving aliases only (no manual container management).
 
-Pyfunc release flow (Test -> holdout -> Production)
+Serving project mapping
+- By default autoserve marks serving containers as separate projects:
+	- `champion -> models_champion`
+	- `challenger -> models_challenger`
+- Configure with `MLFLOW_SERVE_ALIAS_PROJECTS` or per-alias overrides `MLFLOW_SERVE_PROJECT_CHAMPION` / `MLFLOW_SERVE_PROJECT_CHALLENGER`.
+
+MLflow experiment for tag/alias testing
+- Existing experiment: scoring_eldik
+- Recommended model registry flow:
+	1. Pick target registered model version from MLflow UI.
+	2. Assign alias challenger for validation traffic.
+	3. Validate endpoint and metrics.
+	4. Move alias champion when ready.
+	5. Rollback by switching champion to previous version.
+
+CLI examples (mlops-toolkit)
 ```bash
-# Train + log pyfunc + register + set alias Test + holdout validation
-python scripts/release_pyfunc.py --dataset-id <ID>
-
-# Same flow with smoke check + auto promote when candidate is better
-python scripts/release_pyfunc.py --dataset-id <ID> --smoke-url http://localhost:5000 --auto-promote --min-delta 0.0
-
-# Rollback Production alias to previous known-good version
-python scripts/release_pyfunc.py --rollback-model <MODEL_NAME> --rollback-version <VERSION>
+mlops-toolkit alias status --model-name scoring_eldik --aliases champion,challenger
+mlops-toolkit alias set --model-name scoring_eldik --version <VERSION> --alias challenger
+mlops-toolkit alias set --model-name scoring_eldik --version <VERSION> --alias champion
 ```
 
-
-Why MLflow here?
-MLflow provides model registry, run metadata, metrics comparison, and artifact storage. Even if you upload datasets directly, MLflow gives reproducibility, auditability, and easy promotion/rollback via aliases.
+Why this setup
+- minimal operational overhead for a small team,
+- alias-driven champion/challenger releases and rollback,
+- clear observability for service and model endpoint health,
+- reusable local and CI deployment path.
 
 Python toolkit
 Install and use the CLI from [README_library.md](README_library.md) to automate MLflow aliases (Phase 1).
 
-How to call MLflow served models (inside Docker network):
+How to call served models (inside Docker network):
 ```bash
 docker ps --format '{{.Names}}' | grep mlflow-serve-
 docker run --rm --network mlops_default curlimages/curl:8.5.0 -sS http://<mlflow-serve-container>:8080/ping
@@ -107,10 +111,27 @@ docker run --rm --network mlops_default curlimages/curl:8.5.0 -sS \
 	-d '{"dataframe_records":[{"feature_a":1,"feature_b":2}]}' \
 	http://<mlflow-serve-container>:8080/invocations
 ```
-Get the expected feature order from MLflow artifacts: `data_contract/input_schema.json`.
+The helper script `scripts/predict_request.py` can be used for the same `/invocations` smoke test.
+To inspect what the model accepts on input, use `scripts/print_model_input_schema.py` or open the model artifacts in MLflow UI.
+The primary sources are `model/MLmodel` for signature and `model/serving_input_example.json` for a ready `/invocations` payload; `data_contract/input_schema.json` is optional and model-dependent.
+
+How to inspect model input in MLflow
+1) Open MLflow UI and find the registered model version behind alias `champion` or `challenger`.
+2) Open its artifacts and inspect `model/MLmodel`.
+3) Read the `signature` section in `MLmodel` to see input names, dtypes, and shapes.
+4) Open `model/serving_input_example.json` to get a ready payload for `POST /invocations`.
+5) Optionally open `model/input_example.json` for the raw input example and `data_contract/input_schema.json` if the training pipeline logged it.
+
+How to validate scoring
+1) Ensure the serving container exists: `docker ps --format '{{.Names}}' | grep mlflow-serve-`.
+2) Check health with `GET /ping`.
+3) Send the payload from `model/serving_input_example.json` to `POST /invocations`.
+4) For a quick CLI check, use `scripts/predict_request.py --url http://<mlflow-serve-container>:8080 --payload <payload.json>`.
+5) If the request succeeds and Prometheus shows `probe_success=1`, the model is both serving and reachable.
+
+If the model is a multi-input PyTorch network, see the checklist in `docs/ARCHITECTURE.md` before registering it in MLflow. The important rule is that `/invocations` should be designed first, and the MLflow pyfunc wrapper, signature, and examples should be logged to match that contract exactly.
 
 Notes
-- Airflow is kept for scheduled/batch workflows only (daily/weekly retraining or batch predictions).
-- Online inference is performed via MLflow serving containers.
-- Legacy model server is still available via Compose profile: `--profile legacy`.
+- Online inference is performed by alias-driven MLflow serving containers.
+- The runtime is centered on MLflow registry, autoserve, and monitoring only.
 

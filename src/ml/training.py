@@ -239,7 +239,7 @@ def train_candidate(dataset_id: int | None = None, random_state: int = 42, test_
 
 
 def evaluate_models(dataset_id: int | None = None) -> Dict[str, Any]:
-    """Evaluate candidate vs production model on the latest dataset."""
+    """Evaluate candidate vs champion model on the latest dataset."""
     settings = get_settings()
     _set_mlflow_env(settings)
 
@@ -274,11 +274,11 @@ def evaluate_models(dataset_id: int | None = None) -> Dict[str, Any]:
         prod_model = mlflow.sklearn.load_model(prod_uri)
         prod_preds = prod_model.predict(X)
         prod_score = _evaluate(task_type, y, prod_preds)
-        results["production_version"] = prod_version.version
-        results["production_score"] = prod_score
+        results["champion_version"] = prod_version.version
+        results["champion_score"] = prod_score
     except Exception:
-        results["production_version"] = None
-        results["production_score"] = None
+        results["champion_version"] = None
+        results["champion_score"] = None
 
     return results
 
@@ -287,17 +287,17 @@ def promote_if_better(dataset_id: int | None = None) -> dict:
     """Return a recommendation to promote in MLflow UI."""
     metrics = evaluate_models(dataset_id)
     candidate_score = metrics.get("candidate_score")
-    production_score = metrics.get("production_score")
+    champion_score = metrics.get("champion_score")
 
     if candidate_score is None:
         return {"recommendation": "no_candidate", **metrics}
 
     better = False
     if metrics["task_type"] == "regression":
-        if production_score is None or candidate_score < production_score:
+        if champion_score is None or candidate_score < champion_score:
             better = True
     else:
-        if production_score is None or candidate_score > production_score:
+        if champion_score is None or candidate_score > champion_score:
             better = True
 
     return {"recommendation": "promote" if better else "keep", **metrics}
