@@ -307,6 +307,7 @@ services:
   grafana:
     image: grafana/grafana:11.4.0
     restart: always
+    user: "0"
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
