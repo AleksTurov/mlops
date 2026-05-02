@@ -14,13 +14,15 @@ This repository provides a practical MLOps runtime for model registry, model ser
 
 Current components
 - MLflow + PostgreSQL (mlflow-db) for tracking and registry
+- Airflow + PostgreSQL (airflow-db) for orchestration and demo automation
+- Application PostgreSQL (app-db) for demo data and predictions
 - MinIO for artifacts
-- External application PostgreSQL (configured from Vault) for app-side data
 - MLflow autoserve for alias-driven serving containers
 - Prometheus + Blackbox Exporter + Grafana for health monitoring
 - Loki + Promtail for centralized logs
 
 Docs
+- Demo guide (EN): [docs/DEMO.md](docs/DEMO.md)
 - Architecture and flow (EN): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Architecture (RU): [docs/ARCHITECTURE_RU.md](docs/ARCHITECTURE_RU.md)
 
@@ -33,28 +35,42 @@ pip install -r requirements.txt
 
 Quick start
 ```bash
-set -a
-source /data/aturov/vault/scripts/export-env.sh kv/data/dev/mlops
-source /data/aturov/vault/scripts/export-env.sh kv/data/dev/grafana
-source /data/aturov/vault/scripts/export-env.sh kv/data/dev/minio
-source /data/aturov/vault/scripts/export-env.sh kv/data/dev/mlflow
-source /data/aturov/vault/scripts/export-env.sh kv/data/dev/airflow
-set +a
 docker compose up -d --build
 ```
 
-Development deploy via CI
-- Branch: dev
-- Jobs: build_dev -> deploy_dev
-- Secrets source: Vault paths kv/data/dev/mlops, kv/data/dev/grafana, kv/data/dev/minio, kv/data/dev/mlflow
-- Compose project name: mlops
+Optional customization
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
 
-Main endpoints (ports are defined via Vault environment variables)
-- MLflow UI: http://localhost:${MLFLOW_PORT}
-- MinIO Console: http://localhost:${MINIO_CONSOLE_PORT}
-- Grafana: http://localhost:${GRAFANA_PORT}
-- Prometheus: http://localhost:${PROMETHEUS_PORT}
-- Loki: http://localhost:${LOKI_PORT}
+Default demo credentials
+- Airflow UI: `admin` / `admin`
+- Grafana: `admin` / `admin`
+- MinIO: `minioadmin` / `minioadmin123`
+
+Default demo ports
+- MLflow UI: `http://localhost:15000`
+- Airflow UI: `http://localhost:18885`
+- MinIO API: `http://localhost:19000`
+- MinIO Console: `http://localhost:19023`
+- Grafana: `http://localhost:13000`
+- Prometheus: `http://localhost:19090`
+- Loki: `http://localhost:13100`
+- Autoserve health: `http://localhost:15010/health`
+
+The public repository is self-contained. It does not require Vault and uses the default Compose project name `mlops-demo` plus the default network `mlops-demo_default`, so it does not collide with an existing local `mlops` deployment.
+
+What starts automatically
+- MinIO bucket bootstrap
+- Airflow metadata initialization
+- demo admin user in Airflow
+- demo DAG bootstrap for dataset load and model training
+- alias-driven autoserve after model registration
+
+How to override for an internal environment
+- Copy `.env.example` to `.env` and change ports, credentials, project name, or image settings.
+- If you change `COMPOSE_PROJECT_NAME`, also change `COMPOSE_DEFAULT_NETWORK` and `MLFLOW_SERVE_NETWORK` in `.env` so autoserve and Prometheus continue to discover served containers correctly.
 
 Dashboards
 - Grafana dashboards are provisioned from [monitoring/grafana/dashboards-min](monitoring/grafana/dashboards-min)
@@ -94,7 +110,7 @@ Why this setup
 - minimal operational overhead for a small team,
 - alias-driven champion/challenger releases and rollback,
 - clear observability for service and model endpoint health,
-- reusable local and CI deployment path.
+- clone-and-run local demo path.
 
 Python toolkit
 Install and use the CLI from [README_library.md](README_library.md) to automate MLflow aliases (Phase 1).
@@ -133,5 +149,5 @@ If the model is a multi-input PyTorch network, see the checklist in `docs/ARCHIT
 
 Notes
 - Online inference is performed by alias-driven MLflow serving containers.
-- The runtime is centered on MLflow registry, autoserve, and monitoring only.
+- The public demo path is self-contained and does not require Vault.
 

@@ -3,8 +3,9 @@
 ## 1) Service roles
 - **MLflow** — model registry and experiment tracking.
 - **PostgreSQL (mlflow-db)** — MLflow metadata.
+- **Airflow + PostgreSQL (airflow-db)** — orchestration and automatic demo bootstrap.
+- **Application PostgreSQL (app-db)** — app-side data and predictions for the self-contained demo stack.
 - **MinIO** — model artifacts (S3-compatible).
-- **Application PostgreSQL (external)** — app-side data and predictions (provided via Vault env variables).
 - **MLflow Autoserve** — watcher that starts MLflow Serve for each alias.
 - **MLflow Serve containers** — online inference per model+alias.
 - **Prometheus/Grafana** — health/metrics dashboards.
@@ -53,7 +54,8 @@
 
 ## 5) Databases and network
 - The stack runs a local Postgres only for MLflow metadata (`mlflow-db`).
-- Application data DB is external and injected through Vault variables (`APP_DB_*` / `APP_DB_URL`).
+- The public demo stack also runs a local application Postgres (`app-db`) and a local Airflow metadata Postgres (`airflow-db`).
+- Internal environments can still override all connection values through `.env` without using Vault.
 - This separation keeps MLflow metadata independent from Airflow/application operational data.
 
 ## 6) Default runtime conventions
@@ -62,9 +64,10 @@
 - The runtime no longer includes a separate legacy model-server service; online inference is handled only by alias-driven MLflow Serve containers.
 
 ## 7) Endpoints
-All ports are configured via exported environment variables from Vault (`*_PORT`).
-- MLflow UI: http://localhost:${MLFLOW_PORT}
-- MinIO Console: http://localhost:${MINIO_CONSOLE_PORT}
-- Grafana: http://localhost:${GRAFANA_PORT}
-- Prometheus: http://localhost:${PROMETHEUS_PORT}
-- Loki: http://localhost:${LOKI_PORT}
+The public demo stack ships with safe defaults and can also be overridden through `.env`.
+- MLflow UI: http://localhost:15000
+- Airflow UI: http://localhost:18885
+- MinIO Console: http://localhost:19023
+- Grafana: http://localhost:13000
+- Prometheus: http://localhost:19090
+- Loki: http://localhost:13100

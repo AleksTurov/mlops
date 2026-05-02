@@ -5,3 +5,4 @@ pandas==2.2.3
 scikit-learn==1.5.2
 joblib==1.4.2
 python-dotenv==1.0.1
+pytest==8.3.5

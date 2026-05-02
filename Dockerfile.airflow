@@ -1,9 +1,18 @@
-FROM apache/airflow:2.9.3
+FROM python:3.10-slim
 
-# Copy requirements and install them as the 'airflow' user following best practices
-USER root
-COPY requirements-airflow.txt /requirements-airflow.txt
-RUN chown airflow: /requirements-airflow.txt
-USER airflow
-RUN pip install --no-cache-dir -r /requirements-airflow.txt
+ENV AIRFLOW_HOME=/opt/airflow \
+	PYTHONDONTWRITEBYTECODE=1 \
+	PYTHONUNBUFFERED=1 \
+	AIRFLOW_VERSION=2.9.3 \
+	AIRFLOW_CONSTRAINT_URL=https://raw.githubusercontent.com/apache/airflow/constraints-2.9.3/constraints-3.10.txt
+
+WORKDIR /opt/airflow
+
+COPY requirements-airflow.txt /tmp/requirements-airflow.txt
+RUN python -m pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" --constraint "${AIRFLOW_CONSTRAINT_URL}" \
+	&& python -m pip install --no-cache-dir -r /tmp/requirements-airflow.txt
+
+RUN mkdir -p /opt/airflow/dags /opt/airflow/logs /opt/airflow/plugins
+
+ENTRYPOINT ["airflow"]
 
