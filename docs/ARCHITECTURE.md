@@ -1,18 +1,26 @@
 # Architecture and Operating Model (EN)
 
-This file explains how the stack is structured, why the alias-driven deployment model matters, and how the runtime behaves once the demo is up. For startup and verification commands, use [docs/DEMO.md](docs/DEMO.md).
+This file explains how the stack is structured, why the alias-driven deployment model matters, and how the runtime behaves once the demo is up.
+
+Related docs:
+- [README.md](../README.md)
+- [SIMPLE_DIAGRAM.md](SIMPLE_DIAGRAM.md)
+- [DEMO.md](DEMO.md)
+- [CONFERENCE_SCRIPT.md](CONFERENCE_SCRIPT.md)
 
 ## 1) Service Roles
 - **MLflow**: experiment tracking, model registry, aliases, traces.
 - **PostgreSQL (`mlflow-db`)**: MLflow metadata.
 - **MinIO**: model artifacts.
-- **Airflow + PostgreSQL (`airflow-db`)**: orchestration, bootstrap, demo jobs.
+- **Airflow + PostgreSQL (`airflow-db`)**: demo orchestration, bootstrap, and scheduled jobs.
 - **Application PostgreSQL (`app-db`)**: demo data and prediction results.
 - **MLflow Autoserve**: reconciles aliases to serving containers.
-- **MLflow Serve containers**: one online inference endpoint per `model@alias`.
+- **MLflow Serve containers**: one serving runtime per `model@alias`, usable in online and offline-oriented flows.
 - **Prometheus + Blackbox exporter**: service and endpoint health.
-- **Grafana**: dashboards and trace/log navigation.
+- **Grafana**: dashboards that surface Prometheus metrics and Loki logs.
 - **Loki + Promtail**: container logs.
+
+Airflow is the default orchestrator in this demo, but it is not a hard requirement for the architecture itself. Model versions can also come from notebook-driven experimentation or other training pipelines, as long as they are registered in MLflow.
 
 ## 2) Core Innovation
 
@@ -25,12 +33,12 @@ The serving target is controlled by MLflow aliases such as `champion` and `chall
 That changes the operating model in an important way: promotion and rollback move from infrastructure choreography to registry metadata.
 
 ## 3) End-to-End Flow
-1. Airflow loads demo data.
-2. Airflow trains multiple candidates.
+1. Data is prepared from batch sources, application tables, or feature-store-like inputs.
+2. Models are trained in Airflow or notebooks.
 3. The best model is logged to MLflow and registered.
 4. MLflow aliases point to the active model versions.
 5. Autoserve notices alias changes and recreates `mlflow-serve-*` containers.
-6. Prometheus and Grafana show health for both base services and alias endpoints.
+6. Grafana shows health for both base services and alias endpoints using Prometheus metrics and Loki logs.
 7. Bootstrap runs a prediction integration test, which also writes explicit MLflow traces.
 
 The result is a closed loop: train, register, promote, serve, and observe all happen inside one reproducible local stack.
@@ -44,9 +52,10 @@ The result is a closed loop: train, register, promote, serve, and observe all ha
 
 ## 5) Observability
 - **Health**: Blackbox probes `GET /ping` for alias endpoints and health endpoints for infrastructure services.
+- **Metrics**: Prometheus stores infrastructure and probe metrics.
 - **Logs**: Promtail ships container logs to Loki.
 - **Traces**: the bootstrap prediction test writes explicit MLflow traces into experiment `iris-classification_iris`.
-- **Dashboards**: Grafana exposes `MLOps Overview`, `Service Health Detailed`, and `MLflow Serving` for the public demo.
+- **Dashboards**: Grafana exposes `MLOps Overview`, `Service Health Detailed`, and `MLflow Serving` using Prometheus and Loki as its main datasources.
 
 The observability layer is intentionally close to the deployment mechanism: when an alias changes, the same stack shows target health, logs, and trace evidence without requiring a separate platform.
 
@@ -83,3 +92,9 @@ Why this works well on stage:
 | Validation | Separate process | `challenger` alias |
 
 In other words, this architecture does not remove operational discipline. It compresses the path from model decision to serving decision so the rollout mechanism is simpler, faster, and easier to explain.
+
+## 9) Where To Go Next
+
+- Use [DEMO.md](DEMO.md) for the startup and validation runbook.
+- Use [CONFERENCE_SCRIPT.md](CONFERENCE_SCRIPT.md) for a short stage-friendly walkthrough.
+- Use [SCRIPTS.md](SCRIPTS.md) for helper scripts and DAG behavior.

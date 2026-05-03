@@ -2,6 +2,12 @@
 
 This file is the operator runbook for the public demo: start the stack, verify it, and know where to click during a live walkthrough.
 
+Related docs:
+- [README.md](../README.md)
+- [SIMPLE_DIAGRAM.md](SIMPLE_DIAGRAM.md)
+- [CONFERENCE_SCRIPT.md](CONFERENCE_SCRIPT.md)
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+
 ## What this demo shows
 1) Spin up all services.
 2) Load open data via Airflow.
@@ -16,13 +22,13 @@ This file is the operator runbook for the public demo: start the stack, verify i
 ## Step‑by‑step
 1) Start services
 ```
-docker compose up -d --build
+make demo
 ```
 
 Optional customization
 ```
 cp .env.example .env
-docker compose up -d --build
+make demo
 ```
 
 The public demo stack starts without Vault and uses safe default ports that do not overlap with the existing local `mlops` runtime.
@@ -73,7 +79,7 @@ Dashboards are provisioned from `monitoring/grafana/dashboards-min`.
 Run the repo-level verification command:
 
 ```bash
-./scripts/run_demo_checks.sh
+make verify
 ```
 
 This command:
@@ -95,3 +101,5 @@ RUN_INTEGRATION_TESTS=1 .venv/bin/python -m pytest -q test/test_integration_pred
 4. Open the `Traces` tab for experiment `iris-classification_iris`.
 5. Open Grafana dashboards `MLOps Overview`, `Service Health Detailed`, and `MLflow Serving`.
 6. If you want to demonstrate another serving request, rerun the prediction test above.
+
+For a talk-ready script built on top of this runbook, use [CONFERENCE_SCRIPT.md](CONFERENCE_SCRIPT.md).

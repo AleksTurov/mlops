@@ -1,5 +1,12 @@
 # Scripts and Purpose (EN)
 
+This file is the quick reference for helper scripts and scheduled flows used by the public demo.
+
+Related docs:
+- [README.md](../README.md)
+- [DEMO.md](DEMO.md)
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+
 ### scripts/predict_request.py
 - **Why**: send a request to a model endpoint and validate response.
 - **What**: reads MLflow scoring payload and calls `/invocations`.
@@ -36,3 +43,9 @@
 ## Monitoring components
 - **Loki/Promtail**: log aggregation for Grafana.
 - **MLflow Autoserve**: watches MLflow aliases and starts `mlflow models serve` containers.
+
+## Recommended Entry Points
+
+- Use `make demo` to start the stack.
+- Use `make verify` to rerun smoke checks and integration validation.
+- Use `scripts/predict_request.py` when you want to call `/invocations` manually.
