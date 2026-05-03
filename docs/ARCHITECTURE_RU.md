@@ -1,6 +1,12 @@
 # Архитектура и операционная модель (RU)
 
-Этот документ объясняет, как устроен стек, почему alias-driven deployment меняет модель эксплуатации, и за счет чего demo выглядит убедительно как для инженерной аудитории, так и для стейкхолдеров. Для команд запуска и проверки используйте [docs/DEMO.md](docs/DEMO.md).
+Этот документ объясняет, как устроен стек, почему alias-driven deployment меняет модель эксплуатации, и за счет чего demo выглядит убедительно как для инженерной аудитории, так и для стейкхолдеров.
+
+Связанные документы:
+- [README.md](../README.md)
+- [SIMPLE_DIAGRAM.md](SIMPLE_DIAGRAM.md)
+- [DEMO.md](DEMO.md)
+- [CONFERENCE_SCRIPT.md](CONFERENCE_SCRIPT.md)
 
 ## 1) Главная идея
 
@@ -179,4 +185,10 @@ RUN_INTEGRATION_TESTS=1 .venv/bin/python -m pytest -q test/test_integration_pred
 Если формулировать коротко:
 
 **Мы превращаем deployment модели из тяжелой DevOps-операции в дешевое переключение alias внутри MLflow Registry.**
+
+## 12) Что читать дальше
+
+- [DEMO.md](DEMO.md) для запуска и проверки стенда.
+- [CONFERENCE_SCRIPT.md](CONFERENCE_SCRIPT.md) для короткого выступления или live demo.
+- [SCRIPTS.md](SCRIPTS.md) для справки по утилитам и DAG.
 

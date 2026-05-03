@@ -1,6 +1,12 @@
 # Architecture and Operating Model (EN)
 
-This file explains how the stack is structured, why the alias-driven deployment model matters, and how the runtime behaves once the demo is up. For startup and verification commands, use [docs/DEMO.md](docs/DEMO.md).
+This file explains how the stack is structured, why the alias-driven deployment model matters, and how the runtime behaves once the demo is up.
+
+Related docs:
+- [README.md](../README.md)
+- [SIMPLE_DIAGRAM.md](SIMPLE_DIAGRAM.md)
+- [DEMO.md](DEMO.md)
+- [CONFERENCE_SCRIPT.md](CONFERENCE_SCRIPT.md)
 
 ## 1) Service Roles
 - **MLflow**: experiment tracking, model registry, aliases, traces.
@@ -83,3 +89,9 @@ Why this works well on stage:
 | Validation | Separate process | `challenger` alias |
 
 In other words, this architecture does not remove operational discipline. It compresses the path from model decision to serving decision so the rollout mechanism is simpler, faster, and easier to explain.
+
+## 9) Where To Go Next
+
+- Use [DEMO.md](DEMO.md) for the startup and validation runbook.
+- Use [CONFERENCE_SCRIPT.md](CONFERENCE_SCRIPT.md) for a short stage-friendly walkthrough.
+- Use [SCRIPTS.md](SCRIPTS.md) for helper scripts and DAG behavior.
