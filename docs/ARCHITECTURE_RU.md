@@ -1,6 +1,6 @@
 # Архитектура и операционная модель (RU)
 
-Этот документ объясняет, как устроен стек, почему alias-driven deployment меняет модель эксплуатации, и за счет чего demo выглядит убедительно как для инженерной аудитории, так и для стейкхолдеров.
+Этот документ рассказывает ту же историю, что и основной README, но со стороны архитектуры: из чего состоит стек, почему alias-driven deployment меняет модель эксплуатации, и что реально происходит после `make demo`.
 
 Связанные документы:
 - [README.md](../README.md)
@@ -24,7 +24,7 @@
 
 Именно в этом и состоит core innovation проекта: promotion и rollback становятся операциями над metadata, а не отдельным инфраструктурным сценарием.
 
-## 2) Что здесь происходит
+## 2) Что входит в стек
 
 Стек поднимает полноценный локальный MLOps-контур:
 - **MLflow** хранит experiments, registry моделей, alias и traces.
@@ -46,7 +46,19 @@ flowchart LR
     E --> F[Grafana plus Prometheus and Loki]
 ```
 
-## 3) Почему эта модель работает
+## 3) End-to-End Flow
+
+1. Данные приходят из batch-источников, application DB или feature store.
+2. Модели обучаются в Airflow или notebook.
+3. Лучшая версия логируется и регистрируется в MLflow.
+4. Alias в MLflow указывает на активную model version.
+5. Autoserve пересоздает `mlflow-serve-*` контейнеры под новый target.
+6. Grafana показывает состояние сервисов и endpoint'ов через Prometheus и Loki.
+7. Bootstrap path записывает prediction traces в MLflow.
+
+Результат: train, register, promote, serve и observe собраны в одном локально воспроизводимом стенде.
+
+## 4) Почему эта модель работает
 
 Главная сильная сторона не в количестве сервисов, а в том, что deployment становится дешевой, быстрой и обратимой операцией.
 
@@ -60,7 +72,32 @@ flowchart LR
 - **Гибкость использования**: паттерн подходит и для online inference, и для offline scoring.
 - **Понятная демонстрация на сцене**: train → alias → auto-deploy видно сразу и без дополнительных пояснений.
 
-## 4) Traditional vs This Approach
+## 5) Что стартует автоматически
+
+После `make demo` стенд автоматически поднимает:
+- MinIO bucket для MLflow artifacts
+- Airflow metadata и demo admin user
+- `dag_data_predictions` и `dag_training`
+- alias-driven autoserve для `champion` и `challenger`
+- prediction path, который пишет явные MLflow traces
+- Grafana, Prometheus, Loki, Promtail и Blackbox monitoring
+
+Публичный репозиторий не использует Vault и работает в isolated Compose project `mlops-demo` с сетью `mlops-demo_default`.
+
+## 6) Serving path
+
+- каждый alias создает контейнер вида `mlflow-serve-<model>-<alias>`
+- health endpoint: `GET /ping`
+- inference endpoint: `POST /invocations`
+- autoserve передает source experiment из model version run внутрь serving container
+- для demo payload берется из `data_contract/sample_input.csv`, который логируется во время training
+
+Основные entry points для запросов:
+- [../test/test_integration_predictions.py](../test/test_integration_predictions.py)
+- [../scripts/predict_request.py](../scripts/predict_request.py)
+- [../scripts/print_model_input_schema.py](../scripts/print_model_input_schema.py)
+
+## 7) Traditional vs This Approach
 
 | Шаг | Традиционный подход | Этот проект |
 |---|---|---|
@@ -70,7 +107,7 @@ flowchart LR
 | Release target | Среда / environment | Alias в registry |
 | Validation | Отдельный релизный процесс | `challenger` рядом с `champion` |
 
-## 5) Компоненты
+## 8) Компоненты
 
 ### MLflow
 - хранит experiments,
@@ -103,7 +140,7 @@ flowchart LR
 
 Наблюдаемость здесь намеренно расположена рядом с механизмом выкладки: после изменения alias тот же контур сразу показывает health, логи и trace evidence.
 
-## 6) Сценарий для live demo
+## 9) Почему это хорошо работает на demo
 
 Сценарий предельно простой:
 
@@ -121,19 +158,7 @@ flowchart LR
 
 Этот сценарий работает убедительно, потому что deployment виден как операция над metadata, а не как отдельный инфраструктурный ceremony.
 
-## 7) Как работает demo bootstrap
-
-После `docker compose up -d --build` автоматически происходит:
-- инициализация MinIO bucket,
-- инициализация Airflow metadata,
-- запуск `dag_data_predictions`,
-- запуск `dag_training`,
-- запуск integration test на prediction path,
-- запись MLflow traces в experiment `iris-classification_iris`.
-
-То есть demo после старта уже не пустая: в ней есть модель, alias, serving-контейнеры, health и traces.
-
-## 8) Где смотреть результат
+## 10) Где смотреть результат
 
 ### MLflow
 - UI: `http://localhost:15000`
@@ -155,7 +180,7 @@ flowchart LR
 - `mlflow-serve-iris_classifier_iris-champion`
 - `mlflow-serve-iris_classifier_iris-challenger`
 
-## 9) Что важно понимать про traces
+## 11) Что важно понимать про traces
 
 Обычные `POST /invocations` в MLflow Serve не дали traces автоматически в этом стенде.
 
@@ -166,21 +191,21 @@ flowchart LR
 
 Это делает demo предсказуемой: traces появляются всегда, без зависимости от скрытого поведения serve runtime.
 
-## 10) Как быстро перепроверить demo
+## 12) Как быстро перепроверить demo
 
-После `docker compose up -d --build` используйте:
-
-```bash
-./scripts/run_demo_checks.sh
-```
-
-Если нужен только повтор prediction/traces path:
+После `make demo` используйте:
 
 ```bash
-RUN_INTEGRATION_TESTS=1 .venv/bin/python -m pytest -q test/test_integration_predictions.py
+make verify
 ```
 
-## 11) Почему это сильный public demo
+Если нужен только повтор tested champion request path:
+
+```bash
+RUN_INTEGRATION_TESTS=1 .venv/bin/python -m pytest -q test/test_integration_predictions.py -k champion
+```
+
+## 13) Почему это сильный public demo
 
 - Не нужен Vault.
 - Не нужен внешний deployment pipeline.
@@ -193,8 +218,9 @@ RUN_INTEGRATION_TESTS=1 .venv/bin/python -m pytest -q test/test_integration_pred
 
 **Мы превращаем deployment модели из тяжелой DevOps-операции в дешевое переключение alias внутри MLflow Registry.**
 
-## 12) Что читать дальше
+## 14) Что читать дальше
 
+- [README.md](../README.md) для quick start и project positioning.
 - [DEMO.md](DEMO.md) для запуска и проверки стенда.
 - [CONFERENCE_SCRIPT.md](CONFERENCE_SCRIPT.md) для короткого выступления или live demo.
 - [SCRIPTS.md](SCRIPTS.md) для справки по утилитам и DAG.

@@ -1,6 +1,6 @@
 # Architecture and Operating Model (EN)
 
-This file explains how the stack is structured, why the alias-driven deployment model matters, and how the runtime behaves once the demo is up.
+This file explains the same story as the main README, but from the system-design side: what the stack contains, why alias-driven deployment matters, and what actually happens after `make demo`.
 
 Related docs:
 - [README.md](../README.md)
@@ -8,7 +8,17 @@ Related docs:
 - [DEMO.md](DEMO.md)
 - [CONFERENCE_SCRIPT.md](CONFERENCE_SCRIPT.md)
 
-## 1) Service Roles
+## 1) Core Idea
+
+Deployment is not a pipeline.
+
+Deployment is a label.
+
+The serving target is controlled by MLflow aliases such as `champion` and `challenger`. Changing an alias changes the deployed model version without rebuilding a custom API service.
+
+That is the main operating-model change in this project: promotion and rollback move from infrastructure choreography to registry metadata.
+
+## 2) What The Stack Contains
 - **MLflow**: experiment tracking, model registry, aliases, traces.
 - **PostgreSQL (`mlflow-db`)**: MLflow metadata.
 - **MinIO**: model artifacts.
@@ -22,16 +32,6 @@ Related docs:
 
 Airflow is the default orchestrator in this demo, but it is not a hard requirement for the architecture itself. Model versions can also come from notebook-driven experimentation or other training pipelines, as long as they are registered in MLflow.
 
-## 2) Core Innovation
-
-Deployment is not a pipeline.
-
-Deployment is a label.
-
-The serving target is controlled by MLflow aliases such as `champion` and `challenger`. Changing an alias changes the deployed model version without rebuilding a custom API service.
-
-That changes the operating model in an important way: promotion and rollback move from infrastructure choreography to registry metadata.
-
 ## 3) End-to-End Flow
 1. Data is prepared from batch sources, application tables, or feature-store-like inputs.
 2. Models are trained in Airflow or notebooks.
@@ -43,14 +43,31 @@ That changes the operating model in an important way: promotion and rollback mov
 
 The result is a closed loop: train, register, promote, serve, and observe all happen inside one reproducible local stack.
 
-## 4) Serving Flow
+## 4) What Starts Automatically
+
+After `make demo`, the stack bootstraps:
+- MinIO bucket creation for MLflow artifacts
+- Airflow metadata initialization and demo admin user
+- `dag_data_predictions` and `dag_training`
+- alias-driven autoserve for `champion` and `challenger`
+- a prediction integration path that writes explicit MLflow traces
+- Grafana, Prometheus, Loki, Promtail, and Blackbox monitoring
+
+The public repo does not use Vault and runs under the isolated Compose project `mlops-demo` with network `mlops-demo_default`.
+
+## 5) Serving Path
 - Each alias creates a container named like `mlflow-serve-<model>-<alias>`.
 - Health endpoint: `GET /ping`.
 - Inference endpoint: `POST /invocations`.
 - Autoserve resolves the source experiment from the model version run and passes `MLFLOW_EXPERIMENT_NAME` into the serve container.
 - For the current demo, prediction payloads are sourced from `data_contract/sample_input.csv` logged during training.
 
-## 5) Observability
+Canonical request entry points:
+- [../test/test_integration_predictions.py](../test/test_integration_predictions.py)
+- [../scripts/predict_request.py](../scripts/predict_request.py)
+- [../scripts/print_model_input_schema.py](../scripts/print_model_input_schema.py)
+
+## 6) Observability
 - **Health**: Blackbox probes `GET /ping` for alias endpoints and health endpoints for infrastructure services.
 - **Metrics**: Prometheus stores infrastructure and probe metrics.
 - **Logs**: Promtail ships container logs to Loki.
@@ -63,14 +80,14 @@ Important detail:
 - MLflow Serve does not expose Prometheus `/metrics` by default.
 - `GET /metrics -> 404` on a serve container is expected in this project.
 
-## 6) Demo Runtime Conventions
+## 7) Demo Runtime Conventions
 - Default aliases: `champion`, `challenger`.
 - Default serving projects: `models_champion`, `models_challenger`.
 - Default experiment: `iris-classification_iris`.
 - Public demo project name: `mlops-demo`.
 - Public demo network: `mlops-demo_default`.
 
-## 7) Demo Scenario For a Live Talk
+## 8) Why This Works Well In A Demo
 1. Train model.
 2. Assign alias.
 3. Watch auto-deploy.
@@ -81,7 +98,7 @@ Why this works well on stage:
 - the dashboards reflect the rollout without a separate release step,
 - rollback is the same operation in reverse.
 
-## 8) Traditional vs This Approach
+## 9) Traditional vs This Approach
 
 | Step | Traditional | This project |
 |---|---|---|
@@ -93,8 +110,9 @@ Why this works well on stage:
 
 In other words, this architecture does not remove operational discipline. It compresses the path from model decision to serving decision so the rollout mechanism is simpler, faster, and easier to explain.
 
-## 9) Where To Go Next
+## 10) Where To Go Next
 
+- Use [../README.md](../README.md) for quick start and project positioning.
 - Use [DEMO.md](DEMO.md) for the startup and validation runbook.
 - Use [CONFERENCE_SCRIPT.md](CONFERENCE_SCRIPT.md) for a short stage-friendly walkthrough.
 - Use [SCRIPTS.md](SCRIPTS.md) for helper scripts and DAG behavior.
