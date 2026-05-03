@@ -1,93 +1,27 @@
-# MLOps Platform: Alias-Driven Deployment with MLflow
+# Production ML without CI/CD: Deploy models by switching aliases
 
 Deployment is not a pipeline.
 
 Deployment is a label.
 
 This repository is a self-contained open-source MLOps demo where model rollout happens by switching MLflow aliases such as `champion` and `challenger`. Autoserve watches the registry, recreates the right MLflow Serve containers, and the monitoring stack shows the result immediately.
+In this demo, autoserved containers stay inside the Docker network, so the most reliable request path is the one already used in the integration tests.
 
-```mermaid
-flowchart LR
-    A[Train in notebook or Airflow] --> B[Register in MLflow]
-    B --> C[Assign alias]
-    C --> D[Autoserve reconcile]
-    D --> E[Serve online or offline]
-    E --> F[Monitor in Grafana]
-```
+Use these entry points:
+In this demo, autoserved containers stay inside the Docker network, so the canonical request path is the one already covered by the repo tests and helper scripts.
 
-For the first-screen version of this diagram, see [docs/SIMPLE_DIAGRAM.md](docs/SIMPLE_DIAGRAM.md).
+Use these entry points:
+- exact end-to-end request path: [test/test_integration_predictions.py](test/test_integration_predictions.py)
+- manual request helper: [scripts/predict_request.py](scripts/predict_request.py)
+- input schema inspection: [scripts/print_model_input_schema.py](scripts/print_model_input_schema.py)
 
-## Why This Project Exists
-
-Most ML stacks still treat deployment as external CI/CD choreography.
-
-This project keeps the serving decision inside the model registry:
-- train in Airflow or notebooks
-- load data from batch pipelines, databases, or feature stores
-- register in MLflow
-- switch alias
-- autoserve redeploys the target model
-- Grafana surfaces health and runtime evidence from Prometheus and Loki
-
-The result is a local, reproducible stack for teams that want to demonstrate or validate alias-driven deployment without buying into a proprietary platform.
-
-## Core Idea
-
-By switching MLflow aliases, this stack can:
-- deploy a new model instantly
-- avoid downtime during rollout
-- roll back in seconds
-- keep deployment semantics inside the registry instead of a separate release workflow
-
-## Simple Flow
-
-The first-screen flow is intentionally small:
-
-- train in Airflow or a notebook
-- register the model in MLflow
-- assign `champion` or `challenger`
-- let autoserve reconcile the serving target
-- observe rollout health in Grafana, backed by Prometheus and Loki
-
-For the visual version, use [docs/SIMPLE_DIAGRAM.md](docs/SIMPLE_DIAGRAM.md).
-
-## Visuals
-
-![Architecture](docs/Mlops_01.png)
-
-![Grafana Overview](docs/grafana1.png)
-
-![Grafana Service Health](docs/grafana2.png)
-
-## 2-Minute Demo
-
-Start the full stack:
+To replay the tested champion request path directly:
 
 ```bash
-make demo
+RUN_INTEGRATION_TESTS=1 .venv/bin/python -m pytest -q test/test_integration_predictions.py -k champion
 ```
 
-Verify the demo runtime:
-
-```bash
-make verify
-```
-
-Then open:
-- MLflow UI: `http://localhost:15000`
-- Airflow UI: `http://localhost:18885`
-- Grafana: `http://localhost:13000`
-- Prometheus: `http://localhost:19090`
-- MinIO Console: `http://localhost:19023`
-- Autoserve health: `http://localhost:15010/health`
-
-What you should see within a couple of minutes:
-- demo data loaded by `dag_data_predictions`
-- training runs and registered models in MLflow
-- aliases `champion` and `challenger`
-- autoserved model containers recreated from alias targets
-- Grafana dashboards showing service and serving health
-
+The current demo payload source is `data_contract/sample_input.csv`, logged during training and reused by the integration test.
 If you prefer raw Docker commands:
 
 ```bash
@@ -101,6 +35,12 @@ Optional customization:
 cp .env.example .env
 make demo
 ```
+## What you get in 2 minutes
+
+- trained model in MLflow
+- champion/challenger aliases
+- auto-deployed serving containers
+- Grafana dashboards with live health
 
 ## Why Not Traditional Deployment?
 
@@ -111,6 +51,26 @@ make demo
 | Serving control | External service layer | Registry-driven autoserve |
 | Demo reproducibility | Usually fragmented | One local stack |
 | Observability linkage | Added later | Built into the serving path |
+
+## Why This Instead of Full MLOps Platforms?
+
+This project is intentionally narrower than platforms like Kubeflow, SageMaker, or other full-stack MLOps suites.
+
+It is useful when you want:
+- no cloud dependency for the core demo path
+- no vendor lock-in around deployment semantics
+- a stack you can reproduce locally
+- minimal setup focused on model registry workflows
+- a clear alias-driven rollout story instead of a broad platform installation
+
+It is not trying to replace every feature of a full MLOps platform. It is a smaller, easier-to-explain system for teams validating registry-driven deployment and rollback.
+
+## Who Is This For?
+
+- ML engineers building internal platforms
+- data scientists moving models closer to production
+- teams experimenting with model registry workflows
+- engineering teams that need a reproducible local demo for model rollout patterns
 
 ## Use Cases
 
@@ -147,6 +107,27 @@ docker ps --format '{{.Names}}' | grep mlflow-serve-
 python scripts/predict_request.py --url http://<serve-container-ip>:8080 --payload /path/to/payload.json
 ```
 
+If you want a direct demo request with `curl`, resolve the running champion container and send one sample Iris row:
+
+```bash
+SERVE_URL="http://$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' mlflow-serve-iris_classifier_iris-champion):8080"
+
+curl -X POST "$SERVE_URL/invocations" \
+    -H "Content-Type: application/json" \
+    -d '{"dataframe_records":[{"sepal length (cm)":5.1,"sepal width (cm)":3.5,"petal length (cm)":1.4,"petal width (cm)":0.2}]}'
+```
+
+If you prefer the built-in Python helper, use the same endpoint with a temporary payload file:
+
+```bash
+SERVE_URL="http://$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' mlflow-serve-iris_classifier_iris-champion):8080"
+PAYLOAD_FILE="$(mktemp)"
+
+printf '%s\n' '{"dataframe_records":[{"sepal length (cm)":5.1,"sepal width (cm)":3.5,"petal length (cm)":1.4,"petal width (cm)":0.2}]}' > "$PAYLOAD_FILE"
+
+python scripts/predict_request.py --url "$SERVE_URL" --payload "$PAYLOAD_FILE"
+```
+
 To inspect the expected input format for a promoted alias:
 
 ```bash
@@ -154,12 +135,6 @@ python scripts/print_model_input_schema.py --model-name iris_classifier_iris --a
 ```
 
 The current demo payload source is `data_contract/sample_input.csv`, logged during training and reused by the integration test.
-
-## Default Credentials
-
-- Airflow UI: `admin` / `admin`
-- Grafana: `admin` / `admin`
-- MinIO: `minioadmin` / `minioadmin123`
 
 ## What To Open After Startup
 
