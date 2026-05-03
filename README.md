@@ -23,7 +23,7 @@ Clone the repo and run the demo:
 
 ```bash
 git clone https://github.com/AleksTurov/mlops.git
-cd mlops-github-work
+cd mlops
 cp .env.example .env
 make demo
 ```
@@ -38,7 +38,7 @@ If you prefer raw Docker commands:
 
 ```bash
 git clone https://github.com/AleksTurov/mlops.git
-cd mlops-github-work
+cd mlops
 cp .env.example .env
 docker compose up -d --build
 ./scripts/run_demo_checks.sh
