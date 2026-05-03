@@ -8,10 +8,10 @@ This repository is a self-contained open-source MLOps demo where model rollout h
 
 ```mermaid
 flowchart LR
-    A[Train in Airflow] --> B[Register in MLflow]
+    A[Train in notebook or Airflow] --> B[Register in MLflow]
     B --> C[Assign alias]
     C --> D[Autoserve reconcile]
-    D --> E[MLflow Serve]
+    D --> E[Serve online or offline]
     E --> F[Monitor in Grafana]
 ```
 
@@ -22,11 +22,12 @@ For the first-screen version of this diagram, see [docs/SIMPLE_DIAGRAM.md](docs/
 Most ML stacks still treat deployment as external CI/CD choreography.
 
 This project keeps the serving decision inside the model registry:
-- train in Airflow
+- train in Airflow or notebooks
+- load data from batch pipelines, databases, or feature stores
 - register in MLflow
 - switch alias
 - autoserve redeploys the target model
-- Prometheus, Grafana, and Loki show health and runtime evidence
+- Grafana surfaces health and runtime evidence from Prometheus and Loki
 
 The result is a local, reproducible stack for teams that want to demonstrate or validate alias-driven deployment without buying into a proprietary platform.
 
@@ -40,14 +41,15 @@ By switching MLflow aliases, this stack can:
 
 ## Simple Flow
 
-```mermaid
-flowchart LR
-    A[Train in Airflow] --> B[Register model in MLflow]
-    B --> C[Assign alias champion or challenger]
-    C --> D[Autoserve detects alias change]
-    D --> E[MLflow Serve container is recreated]
-    E --> F[Prometheus, Grafana, and Loki show health]
-```
+The first-screen flow is intentionally small:
+
+- train in Airflow or a notebook
+- register the model in MLflow
+- assign `champion` or `challenger`
+- let autoserve reconcile the serving target
+- observe rollout health in Grafana, backed by Prometheus and Loki
+
+For the visual version, use [docs/SIMPLE_DIAGRAM.md](docs/SIMPLE_DIAGRAM.md).
 
 ## Visuals
 
@@ -112,7 +114,7 @@ make demo
 
 This architecture is designed for:
 - champion/challenger rollouts with MLflow Model Registry
-- production-style demos for real-time model serving
+- production-style demos for online and offline inference flows
 - internal platform teams validating registry-driven deployment patterns
 - scoring systems where rollback speed matters more than release ceremony
 
@@ -125,6 +127,8 @@ After `make demo`, the stack bootstraps:
 - alias-driven autoserve for `champion` and `challenger`
 - a prediction integration path that writes explicit MLflow traces
 - Grafana, Prometheus, Loki, Promtail, and Blackbox monitoring
+
+Airflow is the default orchestration path in this demo, but the alias-driven deployment model does not depend on Airflow specifically. The same registry and autoserve flow can be fed from notebook-driven experiments or other training pipelines.
 
 The public repo does not use Vault and runs under the isolated Compose project `mlops-demo` with network `mlops-demo_default`.
 
@@ -158,7 +162,7 @@ The current demo payload source is `data_contract/sample_input.csv`, logged duri
 ## What To Open After Startup
 
 - MLflow experiment `iris-classification_iris` for runs, models, and traces
-- Grafana dashboards `MLOps Overview`, `Service Health Detailed`, and `MLflow Serving`
+- Grafana dashboards `MLOps Overview`, `Service Health Detailed`, and `MLflow Serving`, backed by Prometheus metrics and Loki logs
 - Airflow DAGs `dag_data_predictions` and `dag_training`
 
 ## Stack Components
@@ -167,7 +171,7 @@ The current demo payload source is `data_contract/sample_input.csv`, logged duri
 - MinIO for artifacts
 - Airflow + PostgreSQL for orchestration and bootstrap
 - App PostgreSQL for demo data and predictions
-- MLflow autoserve for alias-driven online serving
+- MLflow autoserve for alias-driven model serving in online and offline-oriented workflows
 - Prometheus + Grafana + Loki + Promtail for observability
 
 ## Docs

@@ -29,19 +29,21 @@
 Стек поднимает полноценный локальный MLOps-контур:
 - **MLflow** хранит experiments, registry моделей, alias и traces.
 - **MinIO** хранит артефакты моделей.
-- **Airflow** готовит данные, запускает обучение и bootstrap demo-сценария.
+- **Airflow** в этом demo готовит данные, запускает обучение и bootstrap-сценарий.
 - **MLflow Autoserve** следит за alias и поднимает serving-контейнеры автоматически.
-- **Prometheus + Grafana + Loki** дают health, логи и наблюдаемость.
+- **Prometheus + Grafana + Loki** дают health, метрики, логи и наблюдаемость.
+
+При этом Airflow здесь не является обязательным требованием архитектуры. Модель можно обучить и из notebook, а затем зарегистрировать в MLflow Registry. Источником данных могут быть batch-таблицы, application DB или feature store.
 
 Итоговый поток очень простой:
 
 ```mermaid
 flowchart LR
-    A[Airflow train] --> B[MLflow model version]
+    A[Notebook or Airflow train] --> B[MLflow model version]
     B --> C[Alias champion or challenger]
     C --> D[Autoserve reconcile]
-    D --> E[MLflow Serve container]
-    E --> F[Grafana and MLflow Traces]
+    D --> E[Online or offline serving path]
+    E --> F[Grafana plus Prometheus and Loki]
 ```
 
 ## 3) Почему эта модель работает
@@ -54,6 +56,8 @@ flowchart LR
 - **Прозрачность**: registry, serving, health и traces видны в одном контуре.
 - **Минимум кастомного кода**: serving построен на стандартном MLflow Serve.
 - **Один воспроизводимый контур**: тот же стек подходит для demo, разработки и диагностики.
+- **Гибкость обучения**: обучение может идти через Airflow, notebook или другой pipeline, если итоговая модель попадает в MLflow Registry.
+- **Гибкость использования**: паттерн подходит и для online inference, и для offline scoring.
 - **Понятная демонстрация на сцене**: train → alias → auto-deploy видно сразу и без дополнительных пояснений.
 
 ## 4) Traditional vs This Approach
@@ -83,6 +87,8 @@ flowchart LR
 - запускает `dag_training`,
 - через `demo-bootstrap` поднимает demo в рабочее состояние.
 
+Важно: для самой идеи alias-driven deployment Airflow не обязателен. Он просто выбран как orchestration layer в этой публичной demo-сборке.
+
 ### MLflow Autoserve
 - читает registry,
 - находит версии за alias,
@@ -90,8 +96,8 @@ flowchart LR
 - тем самым превращает alias в реальный deployment mechanism.
 
 ### Observability stack
-- Prometheus и Blackbox проверяют доступность,
-- Grafana показывает состояние сервисов и alias,
+- Prometheus и Blackbox проверяют доступность и хранят метрики,
+- Grafana показывает состояние сервисов и alias, используя Prometheus и Loki как источники данных,
 - Loki хранит логи,
 - MLflow показывает traces demo-запросов.
 
@@ -106,7 +112,7 @@ flowchart LR
 3. **Step 3: watch auto-deploy**
 
 Практически это выглядит так:
-- в Airflow появляется успешный training run,
+- в Airflow или notebook появляется успешный training run,
 - в MLflow появляется новая model version,
 - alias `champion` или `challenger` указывает на нужную версию,
 - autoserve автоматически пересоздает serving-контейнер,
@@ -181,6 +187,7 @@ RUN_INTEGRATION_TESTS=1 .venv/bin/python -m pytest -q test/test_integration_pred
 - Не нужен отдельный custom serving layer.
 - Все поднимается локально одной командой.
 - Архитектура понятна и для инженеров, и для менеджмента.
+- Подход не привязан только к online serving: его можно использовать и для offline scoring сценариев.
 
 Если формулировать коротко:
 
