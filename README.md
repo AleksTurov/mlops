@@ -15,6 +15,8 @@ flowchart LR
     E --> F[Monitor in Grafana]
 ```
 
+![Live Demo](docs/mlops.gif)
+
 For the first-screen version of this diagram, see [docs/SIMPLE_DIAGRAM.md](docs/SIMPLE_DIAGRAM.md).
 
 ## Quick Start
@@ -34,6 +36,8 @@ Verify the runtime:
 make verify
 ```
 
+Treat this as an explicit re-check, not as a required part of the first startup path. The bootstrap container already waits for the main services, triggers the demo DAGs, and runs the prediction integration path automatically.
+
 If you prefer raw Docker commands:
 
 ```bash
@@ -41,7 +45,6 @@ git clone https://github.com/AleksTurov/mlops.git
 cd mlops
 cp .env.example .env
 docker compose up -d --build
-./scripts/run_demo_checks.sh
 ```
 
 ## What You Get In 2 Minutes

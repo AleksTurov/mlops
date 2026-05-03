@@ -25,8 +25,8 @@ If you only read one file first, start with [../README.md](../README.md).
 ## Consistent Entry Points
 
 - Quick start: `git clone https://github.com/AleksTurov/mlops.git`, `cd mlops`, `cp .env.example .env`, `make demo`
-- Verification: `make verify`
-- Raw Docker alternative: `docker compose up -d --build` and `./scripts/run_demo_checks.sh`
+- Verification: `make verify` when you want an explicit re-check of a running stack
+- Raw Docker alternative: `docker compose up -d --build`
 - API test path: [../test/test_integration_predictions.py](../test/test_integration_predictions.py)
 - Manual API helper: [../scripts/predict_request.py](../scripts/predict_request.py)
 

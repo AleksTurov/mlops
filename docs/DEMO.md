@@ -31,8 +31,9 @@ git clone https://github.com/AleksTurov/mlops.git
 cd mlops
 cp .env.example .env
 docker compose up -d --build
-./scripts/run_demo_checks.sh
 ```
+
+The bootstrap container already waits for the main services, triggers the demo DAGs, and runs the prediction integration path automatically.
 
 The public demo stack starts without Vault and uses safe default ports that do not overlap with the existing local `mlops` runtime.
 
@@ -95,6 +96,8 @@ This command:
 - smoke-checks the main local services
 - runs the full pytest suite with integration checks enabled
 - confirms the current demo runtime before a live session
+
+Treat this as an explicit re-check, not as a required part of the first startup path.
 
 If you only want to replay the tested champion request path:
 
