@@ -55,7 +55,9 @@ For the visual version, use [docs/SIMPLE_DIAGRAM.md](docs/SIMPLE_DIAGRAM.md).
 
 ![Architecture](docs/Mlops_01.png)
 
-![Service Health](docs/Mlops_02.png)
+![Grafana Overview](docs/grafana1.png)
+
+![Grafana Service Health](docs/grafana2.png)
 
 ## 2-Minute Demo
 

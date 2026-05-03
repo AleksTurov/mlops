@@ -22,4 +22,5 @@ This folder is organized around one question per document, so a new reader can m
 ## Visual Assets
 
 - [Mlops_01.png](Mlops_01.png): detailed architecture diagram.
-- [Mlops_02.png](Mlops_02.png): service health screenshot from Grafana.
+- [grafana1.png](grafana1.png): Grafana overview screenshot for the demo stack.
+- [grafana2.png](grafana2.png): Grafana service health screenshot for alias-driven serving.
