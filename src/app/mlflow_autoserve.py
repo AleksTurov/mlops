@@ -94,8 +94,10 @@ def _iter_models_with_alias(client: MlflowClient, alias: str) -> Iterable[tuple[
         name = model.name
         try:
             version = client.get_model_version_by_alias(name, alias).version
-        except Exception:
-            continue
+        except mlflow.exceptions.MlflowException as exc:
+            if exc.error_code == "RESOURCE_DOES_NOT_EXIST":
+                continue
+            raise
         yield name, str(version)
 
 
@@ -422,7 +424,12 @@ def main() -> None:
     while True:
         for alias in aliases:
             project = _project_for_alias(alias, alias_projects)
-            for model_name, version in _iter_models_with_alias(client, alias):
+            try:
+                models_with_alias = list(_iter_models_with_alias(client, alias))
+            except Exception:
+                logger.exception("Autoserve alias scan failed for %s; retrying on next poll", alias)
+                continue
+            for model_name, version in models_with_alias:
                 try:
                     trace_experiment_name = _resolve_trace_experiment(
                         client=client,

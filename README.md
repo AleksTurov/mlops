@@ -36,6 +36,27 @@ Verify the runtime:
 make verify
 ```
 
+To check replacement and failure handling independently of the demo stack:
+
+```bash
+docker compose build mlflow-autoserve  # only needed when the base image is absent
+make check-deployment
+```
+
+This uses a private SQLite MLflow registry, public Iris models and a unique Docker
+network. It checks successful replacement (including Docker DNS and predictions),
+an unavailable model artifact during image preparation, and a cached image whose
+model cannot start. Test containers, images and network are removed afterward;
+artifacts and `result.json` remain in the temporary result directory printed by the
+command. To choose the base image or output directory, use
+`CHECK_DEPLOYMENT_ARGS='--base-image IMAGE --output /tmp/FRESH_DIRECTORY'`.
+The check calls Autoserve's replacement function directly and excludes polling
+latency. Availability is sampled; it does not establish a zero-downtime guarantee.
+
+Autoserve logs failed registry scans and retries on the next polling cycle while
+retaining current serving containers. An absent alias is skipped; other registry
+errors are not silently treated as an absent alias.
+
 Treat this as an explicit re-check, not as a required part of the first startup path. The bootstrap container already waits for the main services, triggers the demo DAGs, and runs the prediction integration path automatically.
 
 If you prefer raw Docker commands:

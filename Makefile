@@ -1,9 +1,10 @@
-.PHONY: help demo verify down ps logs
+.PHONY: help demo verify down ps logs check-deployment
 
 help:
 	@printf '%s\n' 'Available targets:'
 	@printf '%s\n' '  make demo    - build and start the demo stack'
 	@printf '%s\n' '  make verify  - run smoke checks and integration validation'
+	@printf '%s\n' '  make check-deployment - run isolated real Docker replacement checks'
 	@printf '%s\n' '  make down    - stop the stack'
 	@printf '%s\n' '  make ps      - show running services'
 	@printf '%s\n' '  make logs    - follow compose logs'
@@ -22,3 +23,8 @@ ps:
 
 logs:
 	docker compose logs -f --tail=200
+
+PYTHON ?= .venv/bin/python
+CHECK_DEPLOYMENT_ARGS ?=
+check-deployment:
+	$(PYTHON) scripts/check_deployment.py $(CHECK_DEPLOYMENT_ARGS)
