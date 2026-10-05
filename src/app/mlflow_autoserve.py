@@ -10,6 +10,7 @@ from typing import Iterable
 
 import docker
 import mlflow
+import requests
 from mlflow import models as mlflow_models
 from mlflow.tracking import MlflowClient
 
@@ -192,6 +193,38 @@ def _gpu_enabled() -> bool:
     return os.getenv("MLFLOW_SERVE_ENABLE_GPU", "false").strip().lower() in {"1", "true", "yes"}
 
 
+def _wait_ready(container, network: str, port: int) -> None:
+    timeout = float(os.getenv("MLFLOW_SERVE_READY_TIMEOUT_SECONDS", "120"))
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        container.reload()
+        if container.status in {"exited", "dead"}:
+            raise RuntimeError(f"Container {container.name} exited before readiness")
+        address = container.attrs["NetworkSettings"]["Networks"][network]["IPAddress"]
+        if address:
+            try:
+                if requests.get(f"http://{address}:{port}/ping", timeout=1).status_code == 200:
+                    return
+            except requests.RequestException:
+                pass
+        time.sleep(0.5)
+    raise TimeoutError(f"Container {container.name} failed /ping readiness")
+
+
+def _restore_failed_alias(model_name: str, alias: str, version: str, previous) -> None:
+    if previous is None:
+        return
+    try:
+        client = MlflowClient()
+        # Do not knowingly overwrite a newer external assignment.
+        if str(client.get_model_version_by_alias(model_name, alias).version) == str(version):
+            client.set_registered_model_alias(model_name, alias, previous.labels["mlflow_version"])
+            logger.warning("Restored %s@%s to v%s after failed deployment", model_name, alias,
+                           previous.labels["mlflow_version"])
+    except Exception:
+        logger.exception("Could not restore alias %s@%s", model_name, alias)
+
+
 def _ensure_container(
     docker_client: docker.DockerClient,
     model_name: str,
@@ -229,35 +262,17 @@ def _ensure_container(
         desired_image = _build_image_name(docker_client, model_name, version)
         labels["mlflow_image"] = desired_image
 
+    previous = None
     try:
-        container = docker_client.containers.get(container_name)
-        current_version = container.labels.get("mlflow_version")
-        current_project = container.labels.get("com.docker.compose.project")
-        current_mode = container.labels.get("mlflow_serve_mode")
-        current_image = container.labels.get("mlflow_image")
-        current_gpu_enabled = container.labels.get("mlflow_gpu_enabled")
-        current_models_workers = container.labels.get("mlflow_models_workers")
-        current_launch_mode = container.labels.get("mlflow_launch_mode")
-        if (
-            current_version != version
-            or current_project != project
-            or current_mode != serve_mode
-            or current_image != labels.get("mlflow_image")
-            or current_gpu_enabled != labels.get("mlflow_gpu_enabled")
-            or current_models_workers != labels.get("mlflow_models_workers")
-            or current_launch_mode != labels.get("mlflow_launch_mode")
-        ):
-            container.remove(force=True)
-            raise docker.errors.NotFound(
-                "version, project, serve mode, image, gpu mode, workers or launch mode changed"
-            )
-        if container.status != "running":
-            container.remove(force=True)
-            raise docker.errors.NotFound("container not running")
-        logger.info("MLflow serve running: %s (%s@%s v%s)", container_name, model_name, alias, version)
-        return
+        previous = docker_client.containers.get(container_name)
+        previous.reload()
+        tracked = ("mlflow_version", "com.docker.compose.project", "mlflow_serve_mode",
+                   "mlflow_image", "mlflow_gpu_enabled", "mlflow_models_workers", "mlflow_launch_mode")
+        if previous.status == "running" and all(previous.labels.get(k) == labels.get(k) for k in tracked):
+            logger.info("MLflow serve running: %s (%s@%s v%s)", container_name, model_name, alias, version)
+            return
     except docker.errors.NotFound:
-        pass
+        previous = None
 
     entrypoint = None
     if serve_mode == "docker-image":
@@ -265,13 +280,17 @@ def _ensure_container(
         image = desired_image
         if not _image_exists(docker_client, image):
             logger.info("Building model image %s from %s", image, model_uri)
-            _build_model_image_with_retries(
-                model_uri=model_uri,
-                image_name=image,
-                env_manager=env_manager,
-                retries=build_retries,
-                retry_delay_seconds=build_retry_delay_seconds,
-            )
+            try:
+                _build_model_image_with_retries(
+                    model_uri=model_uri,
+                    image_name=image,
+                    env_manager=env_manager,
+                    retries=build_retries,
+                    retry_delay_seconds=build_retry_delay_seconds,
+                )
+            except Exception:
+                _restore_failed_alias(model_name, alias, version, previous)
+                raise
         command = [
             "models",
             "serve",
@@ -291,7 +310,7 @@ def _ensure_container(
             "models",
             "serve",
             "-m",
-            f"models:/{model_name}@{alias}",
+            f"models:/{model_name}/{version}",
             "-h",
             "0.0.0.0",
             "-p",
@@ -313,19 +332,56 @@ def _ensure_container(
         container_env["NVIDIA_DRIVER_CAPABILITIES"] = "compute,utility"
         device_requests = [docker.types.DeviceRequest(count=-1, capabilities=[["gpu"]])]
 
-    docker_client.containers.run(
-        image=image,
-        name=container_name,
-        command=command,
-        detach=True,
-        network=network,
-        environment=container_env,
-        labels=labels,
-        restart_policy={"Name": "always"},
-        device_requests=device_requests,
-        entrypoint=entrypoint,
-    )
-    logger.info("MLflow serve started: %s (%s@%s v%s)", container_name, model_name, alias, version)
+    replacement = None
+    previous_renamed = False
+    candidate_name = container_name + "-candidate"
+    try:
+        replacement = docker_client.containers.run(
+            image=image,
+            name=candidate_name,
+            command=command,
+            detach=True,
+            network=network,
+            environment=container_env,
+            labels=labels,
+            restart_policy={"Name": "always"},
+            device_requests=device_requests,
+            entrypoint=entrypoint,
+        )
+        _wait_ready(replacement, network, container_port)
+        # A newer alias assignment supersedes this candidate.
+        if str(MlflowClient().get_model_version_by_alias(model_name, alias).version) != str(version):
+            raise RuntimeError("Alias changed during deployment; candidate superseded")
+        if previous is not None:
+            previous.rename(container_name + "-rollback")
+            previous_renamed = True
+        replacement.rename(container_name)
+        _wait_ready(replacement, network, container_port)
+    except Exception:
+        try:
+            # Docker may have created the container before run() raises.
+            if replacement is None:
+                try:
+                    replacement = docker_client.containers.get(candidate_name)
+                except docker.errors.NotFound:
+                    pass
+            if replacement is not None:
+                replacement.remove(force=True)
+        except docker.errors.DockerException:
+            logger.exception("Could not remove failed candidate %s", candidate_name)
+        if previous_renamed:
+            try:
+                previous.rename(container_name)
+            except docker.errors.DockerException:
+                logger.exception("Could not restore serving name %s", container_name)
+        _restore_failed_alias(model_name, alias, version, previous)
+        raise
+    if previous is not None:
+        try:
+            previous.remove(force=True)
+        except docker.errors.DockerException:
+            logger.exception("Replacement is healthy; could not remove previous container %s", previous.name)
+    logger.info("MLflow serve ready: %s (%s@%s v%s)", container_name, model_name, alias, version)
 
 
 def main() -> None:
