@@ -53,6 +53,26 @@ command. To choose the base image or output directory, use
 The check calls Autoserve's replacement function directly and excludes polling
 latency. Availability is sampled; it does not establish a zero-downtime guarantee.
 
+To repeat all three checks 20 times and capture the measurement environment:
+
+```bash
+make measure-deployments
+# Optional fresh output directory:
+make measure-deployments MEASUREMENT_ARGS='--repetitions 20 --output /tmp/mlops-measurements'
+make environment-report
+```
+
+Outputs include `benchmark_results.csv`, `benchmark_summary.json`, `environment.txt`,
+per-run logs and JSON reports, and `deployment_latency.png` when matplotlib is
+installed. Summary statistics use the nearest-rank P95. Intentional failures have
+zero deployment success rate even when failure handling passes. Normal measurements
+include model-image construction with the existing Docker cache; they do not isolate
+a cached-image release, include production polling, measure DevOps effort, or establish
+an atomic traffic switch. Startup failures use the configured test readiness timeout
+(default 15 seconds). The build-failure case uses a missing artifact and fails before
+Docker executes a build. Other demo stack images are inventoried separately and are
+not used by the private SQLite/Iris measurement environment.
+
 Autoserve logs failed registry scans and retries on the next polling cycle while
 retaining current serving containers. An absent alias is skipped; other registry
 errors are not silently treated as an absent alias.

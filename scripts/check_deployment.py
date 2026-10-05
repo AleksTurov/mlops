@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+from datetime import datetime, timezone
 import subprocess
 import sys
 import tempfile
@@ -73,6 +74,10 @@ def main():
              'base_image':base,'base_image_id':real.images.get(base).id,
              'test_type':'real Docker + private SQLite MLflow registry, direct _ensure_container calls',
              'isolation':'unique network and model; test-only serving ownership label',
+             'started_at':datetime.now(timezone.utc).isoformat(),
+             'polling_wait_included':False, 'model_image_cache':'absent on successful replacement; Docker layers retained',
+             'startup_failure_injection':'cached image lacks /opt/ml/model/MLmodel',
+             'build_failure_injection':'model artifact path does not exist; failure precedes Docker build',
              'sampling_interval_seconds':.1,'readiness_timeout_seconds':args.ready_timeout,'scenarios':[]}
     result_file=work/'result.json'
     print(f'Results directory: {work}', flush=True)
@@ -157,6 +162,7 @@ def main():
         with Monitor() as monitor:
             registry.set_registered_model_alias(model,'champion',versions[1])
             deploy(versions[1])
+            deployment_seconds=time.monotonic()-started
             time.sleep(.2)
         active,url=get_serving()
         assert active.id!=first.id and active.labels['mlflow_version']==versions[1] and ping()
@@ -173,7 +179,7 @@ def main():
         dns=peer.exec_run(['python','-c',code])
         assert dns.exit_code==0,dns.output.decode()
         results['scenarios'].append(dict(scenario='successful_replacement',passed=True,
-            elapsed_seconds=time.monotonic()-started,serving_version=versions[1],dns_and_prediction=json.loads(dns.output),
+            elapsed_seconds=time.monotonic()-started,deployment_seconds=deployment_seconds,serving_version=versions[1],dns_and_prediction=json.loads(dns.output),
             **monitor.measurements()))
         save()
         print('PASS: successful replacement, Docker DNS, real predictions',flush=True)
@@ -189,12 +195,13 @@ def main():
                 deploy(failed_build)
             except Exception as exc:
                 error=f'{type(exc).__name__}: {exc}'
+            deployment_seconds=time.monotonic()-started
             time.sleep(.2)
         current,_=get_serving()
         assert error and current.id==stable_id and ping()
         assert str(registry.get_model_version_by_alias(model,'champion').version)==versions[1]
         results['scenarios'].append(dict(scenario='failed_build',passed=True,
-            elapsed_seconds=time.monotonic()-started,error=error,old_container_unchanged=True,
+            elapsed_seconds=time.monotonic()-started,deployment_seconds=deployment_seconds,error=error,old_container_unchanged=True,
             alias_restored_to=versions[1],**monitor.measurements()))
         save()
         print('PASS: image construction failure retains old container and restores alias',flush=True)
@@ -214,6 +221,7 @@ def main():
                 deploy(failed_start)
             except Exception as exc:
                 error=f'{type(exc).__name__}: {exc}'
+            deployment_seconds=time.monotonic()-started
             time.sleep(.2)
         current,_=get_serving()
         assert error and current.id==stable_id and ping()
@@ -224,7 +232,7 @@ def main():
         except docker.errors.NotFound:
             pass
         results['scenarios'].append(dict(scenario='failed_start',passed=True,
-            elapsed_seconds=time.monotonic()-started,error=error,old_container_unchanged=True,
+            elapsed_seconds=time.monotonic()-started,deployment_seconds=deployment_seconds,error=error,old_container_unchanged=True,
             alias_restored_to=versions[1],failed_candidate_removed=True,**monitor.measurements()))
         results['passed']=True
         save()

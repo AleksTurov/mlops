@@ -28,3 +28,12 @@ PYTHON ?= .venv/bin/python
 CHECK_DEPLOYMENT_ARGS ?=
 check-deployment:
 	$(PYTHON) scripts/check_deployment.py $(CHECK_DEPLOYMENT_ARGS)
+
+.PHONY: measure-deployments environment-report
+MEASUREMENT_ARGS ?=
+ENVIRONMENT_ARGS ?=
+measure-deployments:
+	$(PYTHON) scripts/measure_deployments.py $(MEASUREMENT_ARGS)
+
+environment-report:
+	$(PYTHON) scripts/environment_report.py $(ENVIRONMENT_ARGS)
