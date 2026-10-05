@@ -202,6 +202,7 @@ The current demo payload source is `data_contract/sample_input.csv`, logged duri
 ## Docs
 
 - Documentation hub: [docs/README.md](docs/README.md)
+- Autoserve behavior and measurements: [docs/AUTOSERVE_VALIDATION.md](docs/AUTOSERVE_VALIDATION.md)
 - Simple first-screen diagram: [docs/SIMPLE_DIAGRAM.md](docs/SIMPLE_DIAGRAM.md)
 - Conference demo script: [docs/CONFERENCE_SCRIPT.md](docs/CONFERENCE_SCRIPT.md)
 - Demo runbook (EN): [docs/DEMO.md](docs/DEMO.md)

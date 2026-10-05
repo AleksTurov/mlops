@@ -37,7 +37,7 @@ Airflow is the default orchestrator in this demo, but it is not a hard requireme
 2. Models are trained in Airflow or notebooks.
 3. The best model is logged to MLflow and registered.
 4. MLflow aliases point to the active model versions.
-5. Autoserve notices alias changes and recreates `mlflow-serve-*` containers.
+5. Autoserve notices alias changes, starts a candidate, checks `/ping`, and removes the previous container only after replacement readiness.
 6. Grafana shows health for both base services and alias endpoints using Prometheus metrics and Loki logs.
 7. Bootstrap runs a prediction integration test, which also writes explicit MLflow traces.
 
@@ -94,7 +94,7 @@ Important detail:
 
 Why this works well on stage:
 - the registry UI shows the decision point clearly,
-- the serving target changes immediately after the alias move,
+- the serving target changes after alias polling and replacement readiness,
 - the dashboards reflect the rollout without a separate release step,
 - rollback is the same operation in reverse.
 
@@ -103,12 +103,12 @@ Why this works well on stage:
 | Step | Traditional | This project |
 |---|---|---|
 | Deployment | CI/CD | Alias switch |
-| Rollback | Manual | Instant |
+| Rollback | Manual | Alias reassignment, polling and readiness |
 | Serving | Custom API | MLflow serve |
 | Release target | Environment | Registry alias |
 | Validation | Separate process | `challenger` alias |
 
-In other words, this architecture does not remove operational discipline. It compresses the path from model decision to serving decision so the rollout mechanism is simpler, faster, and easier to explain.
+In other words, this architecture does not remove operational discipline. It compresses the path from model decision to serving decision so deployment can be initiated through registry metadata. Comparative deployment speed has not been measured.
 
 ## 10) Where To Go Next
 
@@ -116,3 +116,5 @@ In other words, this architecture does not remove operational discipline. It com
 - Use [DEMO.md](DEMO.md) for the startup and validation runbook.
 - Use [CONFERENCE_SCRIPT.md](CONFERENCE_SCRIPT.md) for a short stage-friendly walkthrough.
 - Use [SCRIPTS.md](SCRIPTS.md) for helper scripts and DAG behavior.
+
+See [AUTOSERVE_VALIDATION.md](AUTOSERVE_VALIDATION.md) for failure handling, measurements and limitations.

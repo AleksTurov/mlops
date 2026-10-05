@@ -13,6 +13,7 @@ If you only read one file first, start with [../README.md](../README.md).
 - [ARCHITECTURE.md](ARCHITECTURE.md): system design and operating model in English.
 - [ARCHITECTURE_RU.md](ARCHITECTURE_RU.md): architecture and positioning in Russian.
 - [SCRIPTS.md](SCRIPTS.md): helper scripts, API helpers, and scheduled flows.
+- [AUTOSERVE_VALIDATION.md](AUTOSERVE_VALIDATION.md): replacement behavior, measurements, limitations and reproduction.
 
 ## Suggested Reading Order
 

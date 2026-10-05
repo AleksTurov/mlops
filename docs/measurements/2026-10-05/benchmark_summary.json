@@ -1,0 +1,89 @@
+{
+  "successful_replacement": {
+    "N": 20,
+    "deployment_success_rate": 1.0,
+    "expected_behavior_pass_rate": 1.0,
+    "deployment_seconds": {
+      "N": 20,
+      "mean": 16.103301590308547,
+      "median": 15.81582145858556,
+      "P95": 17.46485760062933,
+      "min": 15.475563084706664,
+      "max": 17.556767797097564
+    },
+    "scenario_check_seconds": {
+      "N": 20,
+      "mean": 16.520237074047326,
+      "median": 16.227219082415104,
+      "P95": 17.881758615374565,
+      "min": 15.89038042910397,
+      "max": 17.96871683932841
+    },
+    "sampled_unavailable_seconds": {
+      "N": 20,
+      "mean": 0,
+      "median": 0.0,
+      "P95": 0,
+      "min": 0,
+      "max": 0
+    }
+  },
+  "failed_build": {
+    "N": 20,
+    "deployment_success_rate": 0.0,
+    "expected_behavior_pass_rate": 1.0,
+    "deployment_seconds": {
+      "N": 20,
+      "mean": 0.03964998191222548,
+      "median": 0.03909819386899471,
+      "P95": 0.045262422412633896,
+      "min": 0.03613455966114998,
+      "max": 0.04666098207235336
+    },
+    "scenario_check_seconds": {
+      "N": 20,
+      "mean": 0.2512607404962182,
+      "median": 0.25085931457579136,
+      "P95": 0.2571342531591654,
+      "min": 0.24741057865321636,
+      "max": 0.2592683266848326
+    },
+    "sampled_unavailable_seconds": {
+      "N": 20,
+      "mean": 0,
+      "median": 0.0,
+      "P95": 0,
+      "min": 0,
+      "max": 0
+    }
+  },
+  "failed_start": {
+    "N": 20,
+    "deployment_success_rate": 0.0,
+    "expected_behavior_pass_rate": 1.0,
+    "deployment_seconds": {
+      "N": 20,
+      "mean": 15.944416622444987,
+      "median": 15.963808992877603,
+      "P95": 16.15296591259539,
+      "min": 15.6715849917382,
+      "max": 16.224565031006932
+    },
+    "scenario_check_seconds": {
+      "N": 20,
+      "mean": 16.157892822660507,
+      "median": 16.177370546385646,
+      "P95": 16.367562184110284,
+      "min": 15.883625041693449,
+      "max": 16.438246278092265
+    },
+    "sampled_unavailable_seconds": {
+      "N": 20,
+      "mean": 0,
+      "median": 0.0,
+      "P95": 0,
+      "min": 0,
+      "max": 0
+    }
+  }
+}

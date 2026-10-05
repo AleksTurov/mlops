@@ -1,0 +1,17 @@
+{
+  "started_at": "2026-10-05T11:38:14.560785+00:00",
+  "repetitions_requested": 20,
+  "base_image": "mlops-demo-mlflow-autoserve",
+  "ready_timeout_seconds": 15,
+  "sampling_interval_seconds": 0.1,
+  "polling_wait_included": false,
+  "timing_window": "before availability-monitor startup and alias assignment through controller return or failure after alias restoration",
+  "scenario_check_seconds": "also includes validation, sampling tail, and successful-case DNS/prediction checks",
+  "successful_path": "new absent model image; prepared base and Docker build cache retained",
+  "failed_build": "missing artifact; error occurs before Docker build executes",
+  "failed_start": "actual cached image without model, startup/readiness failure",
+  "N_per_iteration": 1,
+  "deployment_success_for_injected_failures": false,
+  "availability_method": "Docker API resolves current stable name to IP; /ping samples at nominal 0.1s intervals; DNS checked after successful replacement",
+  "finished_at": "2026-10-05T11:56:27.991619+00:00"
+}
